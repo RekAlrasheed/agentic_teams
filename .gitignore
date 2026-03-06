@@ -1,0 +1,22 @@
+.env
+__pycache__/
+*.pyc
+node_modules/
+.DS_Store
+*.log
+
+# Don't commit active workspace files (they're ephemeral)
+workspace/tasks/inbox/*
+workspace/tasks/active/*
+workspace/comms/to-founder/*
+workspace/comms/from-founder/*
+workspace/comms/inter-agent/*
+workspace/comms/STOP
+
+# Keep the directory structure
+!workspace/**/.gitkeep
+
+# Don't commit large binary outputs (commit to separate branch or S3 if needed)
+workspace/outputs/**/*.xlsx
+workspace/outputs/**/*.pptx
+workspace/outputs/**/*.pdf
