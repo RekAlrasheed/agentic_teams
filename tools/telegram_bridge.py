@@ -434,7 +434,6 @@ class OutboxWatcher(FileSystemEventHandler):
         self._sent_files.add(filepath.name)
         logger.info(f"New outbox file detected: {filepath.name}")
 
-        # Schedule sending in the bot's event loop
         try:
             loop = asyncio.get_event_loop()
             asyncio.run_coroutine_threadsafe(self._send_file(filepath), loop)
@@ -444,7 +443,6 @@ class OutboxWatcher(FileSystemEventHandler):
     async def _send_file(self, filepath: Path):
         """Read the file and send its content to the Founder."""
         try:
-            # Small delay to ensure file is fully written
             await asyncio.sleep(0.5)
             content = filepath.read_text(encoding="utf-8")
 
@@ -459,6 +457,139 @@ class OutboxWatcher(FileSystemEventHandler):
             logger.info(f"Sent to Founder: {filepath.name}")
         except Exception as e:
             logger.error(f"Failed to send {filepath.name}: {e}")
+
+
+class OutputWatcher(FileSystemEventHandler):
+    """Watches workspace/outputs/ for new files and notifies the Founder."""
+
+    AGENT_NAMES = {
+        "creative": "Muse (Creative)",
+        "technical": "Arch (Technical)",
+        "admin": "Sage (Admin)",
+        "pm": "Navi (PM)",
+    }
+
+    def __init__(self, application: Application):
+        self.application = application
+        self._notified_files: set[str] = set()
+
+    def on_created(self, event):
+        if event.is_directory:
+            return
+
+        filepath = Path(event.src_path)
+        if filepath.name == ".gitkeep":
+            return
+        if str(filepath) in self._notified_files:
+            return
+
+        self._notified_files.add(str(filepath))
+        logger.info(f"New output file detected: {filepath}")
+
+        try:
+            loop = asyncio.get_event_loop()
+            asyncio.run_coroutine_threadsafe(self._notify_output(filepath), loop)
+        except RuntimeError:
+            logger.error("No event loop available for output notification")
+
+    async def _notify_output(self, filepath: Path):
+        """Notify the Founder about a new output file."""
+        try:
+            await asyncio.sleep(1)  # Wait for file to be fully written
+
+            # Determine which agent produced this
+            rel_path = filepath.relative_to(OUTPUTS_DIR)
+            agent_folder = rel_path.parts[0] if rel_path.parts else "unknown"
+            agent_name = self.AGENT_NAMES.get(agent_folder, agent_folder.title())
+
+            # Get file info
+            size = filepath.stat().st_size
+            if size < 1024:
+                size_str = f"{size} B"
+            elif size < 1024 * 1024:
+                size_str = f"{size / 1024:.1f} KB"
+            else:
+                size_str = f"{size / (1024 * 1024):.1f} MB"
+
+            msg = f"📄 *New output from {agent_name}*\n\n"
+            msg += f"📁 `{rel_path}`\n"
+            msg += f"📏 Size: {size_str}\n"
+
+            # For text files, include a preview
+            ext = filepath.suffix.lower()
+            if ext in [".md", ".txt", ".csv", ".html", ".json"]:
+                try:
+                    content = filepath.read_text(encoding="utf-8")
+                    # Send first 500 chars as preview
+                    preview = content[:500]
+                    if len(content) > 500:
+                        preview += "\n\n_... (truncated)_"
+                    msg += f"\n---\n{preview}"
+                except Exception:
+                    pass
+            else:
+                msg += f"\n_{ext.upper().lstrip('.')} file — open locally to view_"
+
+            if len(msg) > TELEGRAM_MAX_LENGTH:
+                msg = msg[:TELEGRAM_MAX_LENGTH - 50] + "\n\n⚠️ _Preview truncated._"
+
+            await self.application.bot.send_message(
+                chat_id=FOUNDER_CHAT_ID,
+                text=msg,
+                parse_mode="Markdown",
+            )
+            logger.info(f"Notified Founder about output: {rel_path}")
+        except Exception as e:
+            logger.error(f"Failed to notify about output {filepath}: {e}")
+
+
+class TaskDoneWatcher(FileSystemEventHandler):
+    """Watches workspace/tasks/done/ for completed tasks and notifies the Founder."""
+
+    def __init__(self, application: Application):
+        self.application = application
+        self._notified_files: set[str] = set()
+
+    def on_created(self, event):
+        if event.is_directory:
+            return
+
+        filepath = Path(event.src_path)
+        if filepath.name == ".gitkeep":
+            return
+        if filepath.name in self._notified_files:
+            return
+
+        self._notified_files.add(filepath.name)
+        logger.info(f"Task completed: {filepath.name}")
+
+        try:
+            loop = asyncio.get_event_loop()
+            asyncio.run_coroutine_threadsafe(self._notify_done(filepath), loop)
+        except RuntimeError:
+            logger.error("No event loop available for done notification")
+
+    async def _notify_done(self, filepath: Path):
+        """Notify the Founder that a task was completed."""
+        try:
+            await asyncio.sleep(0.5)
+            content = filepath.read_text(encoding="utf-8")
+
+            # Extract task description
+            lines = content.strip().split("\n")
+            task_lines = [l for l in lines if not l.startswith("##") and not l.startswith("**") and l.strip()]
+            task_text = task_lines[0][:200] if task_lines else filepath.name
+
+            msg = f"✅ *Task Completed*\n\n{task_text}"
+
+            await self.application.bot.send_message(
+                chat_id=FOUNDER_CHAT_ID,
+                text=msg,
+                parse_mode="Markdown",
+            )
+            logger.info(f"Notified Founder: task done — {filepath.name}")
+        except Exception as e:
+            logger.error(f"Failed to notify task done {filepath}: {e}")
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
@@ -478,12 +609,26 @@ def main():
     app.add_handler(CommandHandler("clear", handle_clear))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # Set up the file watcher for outgoing messages
-    watcher = OutboxWatcher(app)
+    # Set up file watchers
     observer = Observer()
-    observer.schedule(watcher, str(TO_FOUNDER_DIR), recursive=False)
+
+    # 1. Watch outbox — agent messages to Founder
+    outbox_watcher = OutboxWatcher(app)
+    observer.schedule(outbox_watcher, str(TO_FOUNDER_DIR), recursive=False)
+    logger.info(f"Watching outbox: {TO_FOUNDER_DIR}")
+
+    # 2. Watch outputs — notify Founder when agents produce files
+    output_watcher = OutputWatcher(app)
+    observer.schedule(output_watcher, str(OUTPUTS_DIR), recursive=True)
+    logger.info(f"Watching outputs: {OUTPUTS_DIR}")
+
+    # 3. Watch done — notify Founder when tasks complete
+    done_watcher = TaskDoneWatcher(app)
+    observer.schedule(done_watcher, str(DONE_DIR), recursive=False)
+    logger.info(f"Watching done: {DONE_DIR}")
+
     observer.start()
-    logger.info("File watcher started")
+    logger.info("All file watchers started")
 
     # Graceful shutdown
     def shutdown(signum, frame):

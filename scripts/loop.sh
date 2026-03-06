@@ -38,6 +38,7 @@ source .env
 set +a
 
 export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+unset CLAUDECODE
 
 # ── Start Telegram Bridge (once) ────────────────────────────────────────────
 

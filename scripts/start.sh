@@ -89,6 +89,7 @@ echo "════════════════════════�
 echo ""
 
 export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+unset CLAUDECODE
 
 STARTUP_PROMPT="You are Navi, the PM Agent of Navaia's AI Workforce.
 
