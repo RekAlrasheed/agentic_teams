@@ -90,9 +90,21 @@ while [ "$SESSION_COUNTER" -lt "$MAX_RESTARTS" ]; do
         break
     fi
 
+    # ── Check if there's any work BEFORE launching Claude (saves tokens) ────
+    INBOX_COUNT=$(find workspace/tasks/inbox -type f ! -name '.gitkeep' 2>/dev/null | wc -l | tr -d ' ')
+    ACTIVE_COUNT=$(find workspace/tasks/active -type f ! -name '.gitkeep' 2>/dev/null | wc -l | tr -d ' ')
+    FOUNDER_MSG_COUNT=$(find workspace/comms/from-founder -type f ! -name '.gitkeep' 2>/dev/null | wc -l | tr -d ' ')
+
+    if [ "$INBOX_COUNT" -eq 0 ] && [ "$ACTIVE_COUNT" -eq 0 ] && [ "$FOUNDER_MSG_COUNT" -eq 0 ]; then
+        echo "😴 $(date '+%H:%M:%S') — No tasks. Sleeping 60s... (send a task via Telegram to wake up)"
+        sleep 60
+        continue
+    fi
+
     SESSION_COUNTER=$((SESSION_COUNTER + 1))
     echo "──────────────────────────────────────────────────"
     echo "📡 Session #${SESSION_COUNTER} starting at $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "   Tasks: inbox=$INBOX_COUNT active=$ACTIVE_COUNT replies=$FOUNDER_MSG_COUNT"
     echo "──────────────────────────────────────────────────"
 
     # Build the resume prompt
@@ -141,19 +153,6 @@ Resume operations now."
     if [ -f "$STOP_FILE" ]; then
         echo "🛑 STOP signal detected after session. Halting."
         break
-    fi
-
-    # ── Check if there's any work before restarting ────────────────────────
-    INBOX_COUNT=$(find workspace/tasks/inbox -type f ! -name '.gitkeep' 2>/dev/null | wc -l | tr -d ' ')
-    ACTIVE_COUNT=$(find workspace/tasks/active -type f ! -name '.gitkeep' 2>/dev/null | wc -l | tr -d ' ')
-    FOUNDER_MSG_COUNT=$(find workspace/comms/from-founder -type f ! -name '.gitkeep' 2>/dev/null | wc -l | tr -d ' ')
-
-    if [ "$INBOX_COUNT" -eq 0 ] && [ "$ACTIVE_COUNT" -eq 0 ] && [ "$FOUNDER_MSG_COUNT" -eq 0 ]; then
-        echo ""
-        echo "😴 No tasks in inbox, active, or from-founder. Sleeping longer to save tokens..."
-        echo "   Checking again in 60s. Send a task via Telegram to wake up."
-        sleep 60
-        continue
     fi
 
     echo ""
