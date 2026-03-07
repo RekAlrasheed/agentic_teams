@@ -253,6 +253,103 @@ AGENT_DISPLAY = {
 }
 
 
+# ── Claude CLI Integration (uses Max subscription) ──────────────────────────
+
+async def ask_claude(question: str, context: str = "") -> str:
+    """
+    Ask Claude a question using the CLI (Max subscription — no extra cost).
+    Uses Haiku-tier for quick answers to save tokens.
+    Returns the answer as a string.
+    """
+    # Build a focused prompt with company context
+    knowledge_index = ""
+    index_file = REPO_ROOT / "knowledge" / "INDEX.md"
+    if index_file.exists():
+        try:
+            knowledge_index = index_file.read_text(encoding="utf-8")[:3000]
+        except Exception:
+            pass
+
+    # Load recent outputs for context
+    recent_work = ""
+    for o in get_output_files(3):
+        ext = o["full_path"].suffix.lower()
+        if ext in [".md", ".txt"]:
+            try:
+                content = o["full_path"].read_text(encoding="utf-8")[:2000]
+                recent_work += f"\n--- {o['path']} ---\n{content}\n"
+            except Exception:
+                pass
+
+    system_prompt = f"""You are the Navaia Crew assistant bot on Telegram. Answer the Founder's question concisely and helpfully.
+You have access to the company knowledge base and recent agent work.
+Keep answers short (under 300 words) — the Founder reads on mobile.
+If you don't know something, say so honestly. Don't make things up.
+Answer in the same language as the question (English or Arabic).
+
+Company context (knowledge index):
+{knowledge_index[:2000]}
+
+Recent agent work:
+{recent_work[:2000]}
+
+{context}"""
+
+    prompt = question
+
+    try:
+        # Use claude CLI with --print flag for non-interactive output
+        env = os.environ.copy()
+        env.pop("CLAUDECODE", None)  # Prevent nested session detection
+
+        proc = await asyncio.create_subprocess_exec(
+            "claude", "-p", prompt,
+            "--model", "haiku",
+            "--max-turns", "1",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env,
+            cwd=str(REPO_ROOT),
+        )
+
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+        answer = stdout.decode("utf-8").strip()
+
+        if not answer:
+            logger.warning(f"Claude returned empty response. stderr: {stderr.decode()[:200]}")
+            return ""
+
+        logger.info(f"Claude answered ({len(answer)} chars)")
+        return answer
+
+    except asyncio.TimeoutError:
+        logger.error("Claude CLI timed out (60s)")
+        return ""
+    except FileNotFoundError:
+        logger.error("Claude CLI not found")
+        return ""
+    except Exception as e:
+        logger.error(f"Claude CLI error: {e}")
+        return ""
+
+
+# Status-only questions that don't need Claude
+STATUS_KEYWORDS = [
+    "doing", "working", "running", "active", "alive", "started", "online",
+    "did it do", "done so far", "progress", "what happened", "been done",
+    "completed", "finished", "results", "updates", "update", "deliverables",
+    "output", "is it done", "pending", "queue", "inbox", "waiting", "backlog",
+    "next", "trello", "board", "cards", "kanban", "who", "team", "agents", "crew",
+    "status",
+]
+
+
+def is_status_question(text: str) -> bool:
+    """Check if a question is about system status (answer locally) vs a real question (ask Claude)."""
+    text_lower = text.strip().lower()
+    return any(kw in text_lower for kw in STATUS_KEYWORDS)
+
+
 # ── Message Classification ───────────────────────────────────────────────────
 
 QUESTION_PATTERNS = [
@@ -485,11 +582,29 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     logger.info(f"[{msg_type}] {text[:60]}...")
 
     if msg_type == "greeting":
-        await update.message.reply_text(build_greeting_response(), parse_mode="Markdown")
+        # Greetings get a quick local response + Claude flavor
+        greeting = build_greeting_response()
+        await update.message.reply_text(greeting, parse_mode="Markdown")
 
     elif msg_type == "question":
-        response = build_question_response(text)
-        await update.message.reply_text(response, parse_mode="Markdown")
+        # Status questions → answer locally (fast, free)
+        # Real questions → ask Claude via CLI (uses Max subscription)
+        if is_status_question(text):
+            response = build_question_response(text)
+            await update.message.reply_text(response, parse_mode="Markdown")
+        else:
+            # Real question — ask Claude
+            await update.message.reply_text("🤔 Let me think...")
+            answer = await ask_claude(text)
+            if answer:
+                # Truncate for Telegram if needed
+                if len(answer) > TELEGRAM_MAX_LENGTH - 100:
+                    answer = answer[:TELEGRAM_MAX_LENGTH - 100] + "\n\n⚠️ _Answer truncated._"
+                await update.message.reply_text(answer)
+            else:
+                # Fallback to local status if Claude fails
+                response = build_question_response(text)
+                await update.message.reply_text(response, parse_mode="Markdown")
 
     elif msg_type == "reply":
         # Save reply for agents
