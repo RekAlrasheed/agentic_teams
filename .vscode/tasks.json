@@ -1,0 +1,81 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Navi (PM Agent)",
+      "type": "shell",
+      "command": "bash scripts/agent-loop.sh pm",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "navaia-crew"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Muse (Creative Agent)",
+      "type": "shell",
+      "command": "bash scripts/agent-loop.sh creative",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "navaia-crew"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Arch (Technical Agent)",
+      "type": "shell",
+      "command": "bash scripts/agent-loop.sh technical",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "navaia-crew"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Sage (Admin Agent)",
+      "type": "shell",
+      "command": "bash scripts/agent-loop.sh admin",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "navaia-crew"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Navaia Dashboard",
+      "type": "shell",
+      "command": "python3 dashboard/server.py",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "navaia-crew"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Start Navaia Crew",
+      "dependsOn": [
+        "Navi (PM Agent)",
+        "Muse (Creative Agent)",
+        "Arch (Technical Agent)",
+        "Sage (Admin Agent)",
+        "Navaia Dashboard"
+      ],
+      "dependsOrder": "parallel",
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    }
+  ]
+}

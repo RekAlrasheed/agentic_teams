@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NAVAIA Crew HQ — Settings</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav>
+        <a href="/" class="nav-brand">CREW HQ<span>NAVAIA AI WORKFORCE</span></a>
+        <ul class="nav-links">
+            <li><a href="/">COMMAND</a></li>
+            <li><a href="/office">OFFICE</a></li>
+            <li><a href="/board">BOARD</a></li>
+            <li><a href="/outputs">OUTPUTS</a></li>
+            <li><a href="/chat">CHAT</a></li>
+            <li><a href="/settings">SETTINGS</a></li>
+        </ul>
+        <div class="nav-status">
+            <span class="status-dot" id="conn-dot"></span>
+        </div>
+    </nav>
+
+    <div class="page">
+        <div class="page-title">
+            <span class="pixel-icon">&#9881;</span> SETTINGS
+        </div>
+
+        <!-- Agent Management -->
+        <div class="settings-section">
+            <div class="panel">
+                <div class="panel-header">
+                    AGENT ROSTER
+                    <button class="pixel-btn small" onclick="showAddAgentModal()">+ ADD AGENT</button>
+                </div>
+                <div class="panel-body">
+                    <div class="settings-grid" id="agent-roster">
+                        <div class="loading">LOADING...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Integration Settings -->
+        <div class="settings-section">
+            <div class="panel">
+                <div class="panel-header">INTEGRATIONS</div>
+                <div class="panel-body" id="integration-settings">
+                    <div class="grid-2">
+                        <div>
+                            <div class="pixel-form">
+                                <label>TELEGRAM BOT TOKEN</label>
+                                <input class="pixel-input" type="password" value="••••••••••" disabled
+                                    style="font-family: monospace;">
+                                <span style="font-size: 14px; color: var(--text-dim);">Set via .env file: TELEGRAM_BOT_TOKEN</span>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="pixel-form">
+                                <label>TRELLO BOARD ID</label>
+                                <input class="pixel-input" type="password" value="••••••••••" disabled
+                                    style="font-family: monospace;">
+                                <span style="font-size: 14px; color: var(--text-dim);">Set via .env file: TRELLO_BOARD_ID</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Crew Controls -->
+        <div class="settings-section">
+            <div class="panel">
+                <div class="panel-header">CREW CONTROLS</div>
+                <div class="panel-body">
+                    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                        <button class="pixel-btn success" onclick="crewAction('start')">START ALL</button>
+                        <button class="pixel-btn danger" onclick="crewAction('stop')">STOP ALL</button>
+                        <button class="pixel-btn secondary" onclick="crewAction('restart')">RESTART</button>
+                    </div>
+                    <div style="margin-top: 12px; font-size: 14px; color: var(--text-dim);">
+                        Start/Stop controls send signals via workspace files. Agents respond on next loop cycle.
+                    </div>
+                    <div id="crew-action-result" style="margin-top: 8px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Info -->
+        <div class="settings-section">
+            <div class="panel">
+                <div class="panel-header">SYSTEM INFO</div>
+                <div class="panel-body" id="system-info" style="font-size: 16px; color: var(--text-dim);">
+                    Loading...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        const ROLE_COLORS = {
+            'PM': '#4a9eff',
+            'Creative': '#ff8c42',
+            'Technical': '#a855f7',
+            'Admin': '#22c55e',
+            'Sales': '#f59e0b',
+            'Legal': '#6366f1',
+            'HR': '#ec4899',
+            'Custom': '#666666',
+        };
+
+        async function loadAgentRoster() {
+            try {
+                const agents = await CrewHQ.getAgents();
+                renderRoster(agents);
+            } catch (err) {
+                console.error('Roster load error:', err);
+            }
+        }
+
+        function renderRoster(agents) {
+            const el = document.getElementById('agent-roster');
+            el.innerHTML = agents.map(a => `
+                <div class="agent-manage-card" style="border-left: 4px solid ${a.color};">
+                    <div class="agent-color-dot" style="background: ${a.color};"></div>
+                    <div class="agent-manage-info">
+                        <div class="name" style="color: ${a.color};">${a.name}</div>
+                        <div class="detail">${a.role} | ${a.model} | ${a.id}</div>
+                    </div>
+                    ${['pm', 'creative', 'technical', 'admin'].includes(a.id)
+                        ? '<span style="font-size: 14px; color: var(--text-dim);">CORE</span>'
+                        : `<button class="pixel-btn small danger" onclick="removeAgent('${a.id}', '${a.name}')">DEL</button>`
+                    }
+                </div>
+            `).join('');
+        }
+
+        function showAddAgentModal() {
+            const roleOptions = Object.keys(ROLE_COLORS).map(r =>
+                `<option value="${r}">${r}</option>`
+            ).join('');
+
+            showModal(`
+                <div class="modal-title">ADD NEW AGENT</div>
+                <form class="pixel-form" onsubmit="addAgent(event)">
+                    <label>AGENT ID (lowercase, no spaces)</label>
+                    <input class="pixel-input" id="new-agent-id" placeholder="e.g., sales" required pattern="[a-z0-9-]+">
+
+                    <label>DISPLAY NAME</label>
+                    <input class="pixel-input" id="new-agent-name" placeholder="e.g., Rex" required>
+
+                    <label>ROLE</label>
+                    <select class="pixel-select" id="new-agent-role" onchange="updateColorPreview()">
+                        ${roleOptions}
+                    </select>
+
+                    <label>MODEL</label>
+                    <select class="pixel-select" id="new-agent-model">
+                        <option value="haiku">Haiku (Fast & Cheap)</option>
+                        <option value="sonnet" selected>Sonnet (Balanced)</option>
+                        <option value="opus">Opus (Most Capable)</option>
+                    </select>
+
+                    <label>COLOR</label>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <input type="color" id="new-agent-color" value="#f59e0b" style="width: 40px; height: 30px; border: 2px solid var(--border); background: var(--bg-input); cursor: pointer;">
+                        <span id="color-preview" style="font-size: 14px;">Preview</span>
+                    </div>
+
+                    <div class="modal-actions">
+                        <button type="button" class="pixel-btn secondary" onclick="closeModal()">CANCEL</button>
+                        <button type="submit" class="pixel-btn">CREATE AGENT</button>
+                    </div>
+                </form>
+            `);
+        }
+
+        function updateColorPreview() {
+            const role = document.getElementById('new-agent-role').value;
+            const colorInput = document.getElementById('new-agent-color');
+            if (ROLE_COLORS[role]) {
+                colorInput.value = ROLE_COLORS[role];
+            }
+        }
+
+        async function addAgent(e) {
+            e.preventDefault();
+            const data = {
+                id: document.getElementById('new-agent-id').value.toLowerCase().replace(/\s+/g, '-'),
+                name: document.getElementById('new-agent-name').value,
+                role: document.getElementById('new-agent-role').value,
+                model: document.getElementById('new-agent-model').value,
+                color: document.getElementById('new-agent-color').value,
+            };
+
+            const result = await CrewHQ.createAgent(data);
+            if (result.ok) {
+                showToast(`Agent ${data.name} created!`);
+                closeModal();
+                loadAgentRoster();
+            } else {
+                showToast(result.error || 'Failed', true);
+            }
+        }
+
+        async function removeAgent(id, name) {
+            if (!confirm(`Remove agent "${name}"? This only removes it from the roster config.`)) return;
+            const result = await CrewHQ.deleteAgent(id);
+            if (result.ok) {
+                showToast(`Agent ${name} removed.`);
+                loadAgentRoster();
+            } else {
+                showToast(result.error || 'Failed', true);
+            }
+        }
+
+        function crewAction(action) {
+            const el = document.getElementById('crew-action-result');
+            if (action === 'stop') {
+                // Write STOP file
+                fetch('/api/task', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        agent: 'pm',
+                        title: 'STOP — Crew shutdown requested',
+                        description: 'Founder requested crew shutdown from Dashboard.',
+                    }),
+                });
+                el.innerHTML = '<span style="color: var(--error);">STOP signal sent. Agents will finish current tasks and exit.</span>';
+            } else if (action === 'start') {
+                el.innerHTML = '<span style="color: var(--online);">Run "bash scripts/loop.sh" in terminal to start agents.</span>';
+            } else {
+                el.innerHTML = '<span style="color: var(--idle);">Restart = Stop + Start. Stop first, then run loop.sh.</span>';
+            }
+        }
+
+        // System info
+        function updateSystemInfo(state) {
+            const el = document.getElementById('system-info');
+            if (!state) return;
+            const onlineAgents = state.agents.filter(a => a.state !== 'OFFLINE').length;
+            el.innerHTML = `
+                <div>Agents online: ${onlineAgents} / ${state.agents.length}</div>
+                <div>Total tasks: ${Object.values(state.tasks).reduce((a, b) => a + b, 0)}</div>
+                <div>Telegram: ${state.integrations.telegram ? 'Connected' : 'Disconnected'}</div>
+                <div>Trello: ${state.integrations.trello ? 'Configured' : 'Not configured'}</div>
+                <div>Server time: ${new Date(state.timestamp).toLocaleString()}</div>
+                <div>Dashboard port: 7777</div>
+            `;
+        }
+
+        // Init
+        document.addEventListener('DOMContentLoaded', () => {
+            loadAgentRoster();
+            CrewHQ.onUpdate((state) => {
+                document.getElementById('conn-dot').className = 'status-dot online';
+                updateSystemInfo(state);
+            });
+        });
+    </script>
+</body>
+</html>

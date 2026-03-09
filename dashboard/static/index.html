@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NAVAIA Crew HQ — Command Center</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav>
+        <a href="/" class="nav-brand">CREW HQ<span>NAVAIA AI WORKFORCE</span></a>
+        <ul class="nav-links">
+            <li><a href="/">COMMAND</a></li>
+            <li><a href="/office">OFFICE</a></li>
+            <li><a href="/board">BOARD</a></li>
+            <li><a href="/outputs">OUTPUTS</a></li>
+            <li><a href="/chat">CHAT</a></li>
+            <li><a href="/settings">SETTINGS</a></li>
+        </ul>
+        <div class="nav-status">
+            <span class="status-dot" id="conn-dot"></span>
+        </div>
+    </nav>
+
+    <div class="page">
+        <div class="page-title">
+            <span class="pixel-icon">&#9635;</span> COMMAND CENTER
+        </div>
+
+        <!-- Agent Status Cards -->
+        <div class="grid-4" id="agent-cards">
+            <div class="loading">LOADING AGENTS...</div>
+        </div>
+
+        <div class="grid-dashboard" style="margin-top: 16px;">
+            <!-- Task Pipeline -->
+            <div class="panel">
+                <div class="panel-header">TASK PIPELINE</div>
+                <div class="panel-body">
+                    <div class="pipeline" id="pipeline">
+                        <div class="pipeline-stage"><span class="count">-</span><span class="label">Inbox</span></div>
+                        <span class="pipeline-arrow">►</span>
+                        <div class="pipeline-stage"><span class="count">-</span><span class="label">Active</span></div>
+                        <span class="pipeline-arrow">►</span>
+                        <div class="pipeline-stage"><span class="count">-</span><span class="label">Done</span></div>
+                        <span class="pipeline-arrow">|</span>
+                        <div class="pipeline-stage"><span class="count">-</span><span class="label">Blocked</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Integrations -->
+            <div class="panel">
+                <div class="panel-header">INTEGRATIONS</div>
+                <div class="panel-body" id="integrations">
+                    <div class="integration-row">
+                        <span class="integration-icon">...</span>
+                        <span>Loading...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Assign -->
+            <div class="panel">
+                <div class="panel-header">QUICK ASSIGN</div>
+                <div class="panel-body">
+                    <form class="pixel-form" id="quick-assign" onsubmit="quickAssign(event)">
+                        <div style="display: flex; gap: 10px;">
+                            <div style="flex: 0 0 140px;">
+                                <label>AGENT</label>
+                                <select class="pixel-select" id="qa-agent"></select>
+                            </div>
+                            <div style="flex: 1;">
+                                <label>TASK</label>
+                                <input class="pixel-input" id="qa-title" placeholder="Task title..." required>
+                            </div>
+                        </div>
+                        <textarea class="pixel-textarea" id="qa-desc" placeholder="Description (optional)..." rows="2"></textarea>
+                        <button type="submit" class="pixel-btn" style="align-self: flex-end;">ASSIGN TASK</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Activity Feed -->
+            <div class="panel">
+                <div class="panel-header">
+                    ACTIVITY FEED
+                    <span style="font-family: 'VT323'; font-size: 14px; color: var(--text-dim);" id="activity-count">0 events</span>
+                </div>
+                <div class="panel-body">
+                    <div class="activity-feed" id="activity-feed">
+                        <div class="empty-state">
+                            <span class="pixel-icon">&#9881;</span>
+                            <div class="message">NO ACTIVITY YET</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        function renderAgentCards(agents) {
+            const el = document.getElementById('agent-cards');
+            if (!agents || !agents.length) {
+                el.innerHTML = '<div class="empty-state"><div class="message">NO AGENTS CONFIGURED</div></div>';
+                return;
+            }
+            el.innerHTML = agents.map(a => `
+                <div class="agent-card" onclick="showTaskModal('${a.id}')" style="border-left: 4px solid ${a.color}">
+                    <div class="agent-name" style="color: ${a.color}">${a.name}</div>
+                    <div class="agent-role">${a.role}</div>
+                    <div class="agent-state ${a.state}">${a.state}</div>
+                    ${a.current_task ? `<div class="agent-task">${escapeHtml(a.current_task)}</div>` : ''}
+                    <div style="font-size: 14px; color: var(--text-dim); margin-top: 4px;">
+                        ${a.task_count} task${a.task_count !== 1 ? 's' : ''} | ${a.model}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderPipeline(tasks) {
+            const el = document.getElementById('pipeline');
+            const stages = [
+                { key: 'inbox', label: 'Inbox' },
+                { key: 'active', label: 'Active' },
+                { key: 'done', label: 'Done' },
+                { key: 'blocked', label: 'Blocked' },
+            ];
+            el.innerHTML = stages.map((s, i) => `
+                ${i > 0 ? `<span class="pipeline-arrow">${i === 3 ? '|' : '►'}</span>` : ''}
+                <div class="pipeline-stage">
+                    <span class="count">${tasks[s.key] || 0}</span>
+                    <span class="label">${s.label}</span>
+                </div>
+            `).join('');
+        }
+
+        function renderIntegrations(integrations) {
+            const el = document.getElementById('integrations');
+            const items = [
+                { key: 'telegram', name: 'Telegram Bot', icon: '►' },
+                { key: 'trello', name: 'Trello Board', icon: '■' },
+                { key: 'github', name: 'GitHub Repo', icon: '◆' },
+            ];
+            el.innerHTML = items.map(item => {
+                const ok = integrations[item.key];
+                return `<div class="integration-row">
+                    <span class="integration-icon ${ok ? 'ok' : 'fail'}">${ok ? '✓' : '✗'}</span>
+                    <span>${item.name}</span>
+                    <span style="margin-left: auto; font-family: 'Press Start 2P'; font-size: 7px; color: ${ok ? 'var(--online)' : 'var(--error)'}">
+                        ${ok ? 'ONLINE' : 'OFFLINE'}
+                    </span>
+                </div>`;
+            }).join('');
+        }
+
+        function renderActivity(activity) {
+            const el = document.getElementById('activity-feed');
+            const countEl = document.getElementById('activity-count');
+            if (!activity || !activity.length) return;
+            countEl.textContent = `${activity.length} events`;
+            el.innerHTML = activity.slice().reverse().map(a => `
+                <div class="activity-item">
+                    <span class="activity-time">${shortTime(a.time)}</span>
+                    <span class="activity-badge" style="background: ${agentColor(a.agent)}; color: #000;">${(a.type || '').toUpperCase().slice(0, 5)}</span>
+                    <span class="activity-text">${escapeHtml(a.message)}</span>
+                </div>
+            `).join('');
+        }
+
+        function populateAgentDropdown(agents) {
+            const sel = document.getElementById('qa-agent');
+            sel.innerHTML = agents.map(a =>
+                `<option value="${a.id}">${a.name}</option>`
+            ).join('');
+        }
+
+        async function quickAssign(e) {
+            e.preventDefault();
+            const agent = document.getElementById('qa-agent').value;
+            const title = document.getElementById('qa-title').value;
+            const desc = document.getElementById('qa-desc').value;
+            await CrewHQ.createTask(agent, title, desc);
+            document.getElementById('qa-title').value = '';
+            document.getElementById('qa-desc').value = '';
+        }
+
+        CrewHQ.onUpdate((state) => {
+            document.getElementById('conn-dot').className = 'status-dot online';
+            renderAgentCards(state.agents);
+            renderPipeline(state.tasks);
+            renderIntegrations(state.integrations);
+            renderActivity(state.activity);
+            populateAgentDropdown(state.agents);
+        });
+    </script>
+</body>
+</html>

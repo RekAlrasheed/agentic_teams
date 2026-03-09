@@ -1,0 +1,879 @@
+/* ═══════════════════════════════════════════════════════
+   NAVAIA CREW HQ — Pixel Art Dark Theme
+   ═══════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
+
+:root {
+    --bg-dark: #0a0a1a;
+    --bg-panel: #12122a;
+    --bg-card: #1a1a3a;
+    --bg-input: #0e0e24;
+    --border: #2a2a5a;
+    --border-glow: #4a9eff44;
+    --text: #e0e0f0;
+    --text-dim: #8888aa;
+    --text-bright: #ffffff;
+    --accent: #4a9eff;
+    --accent-glow: #4a9eff33;
+    /* Agent colors */
+    --navi: #4a9eff;
+    --muse: #ff8c42;
+    --arch: #a855f7;
+    --sage: #22c55e;
+    /* Status colors */
+    --online: #22c55e;
+    --working: #4a9eff;
+    --idle: #fbbf24;
+    --offline: #666688;
+    --done-color: #22c55e;
+    --error: #ef4444;
+    /* Pixel scaling */
+    --pixel: 3px;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    image-rendering: pixelated;
+}
+
+body {
+    font-family: 'VT323', monospace;
+    background: var(--bg-dark);
+    color: var(--text);
+    font-size: 18px;
+    line-height: 1.4;
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+/* ── Scanline overlay ─────────────────────────────── */
+body::after {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(
+        transparent 0px,
+        transparent 2px,
+        rgba(0,0,0,0.05) 2px,
+        rgba(0,0,0,0.05) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+}
+
+/* ── Navigation ────────────────────────────────────── */
+nav {
+    background: var(--bg-panel);
+    border-bottom: 3px solid var(--border);
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    height: 56px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 3px 0 var(--border-glow);
+}
+
+.nav-brand {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 14px;
+    color: var(--accent);
+    text-decoration: none;
+    margin-right: 32px;
+    letter-spacing: 2px;
+    text-shadow: 0 0 10px var(--accent-glow);
+}
+
+.nav-brand span {
+    color: var(--text-dim);
+    font-size: 9px;
+    display: block;
+    margin-top: 2px;
+    letter-spacing: 1px;
+}
+
+.nav-links {
+    display: flex;
+    gap: 4px;
+    list-style: none;
+    flex: 1;
+}
+
+.nav-links a {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 9px;
+    color: var(--text-dim);
+    text-decoration: none;
+    padding: 8px 14px;
+    border: 2px solid transparent;
+    transition: all 0.15s;
+    letter-spacing: 1px;
+}
+
+.nav-links a:hover {
+    color: var(--text);
+    border-color: var(--border);
+    background: var(--bg-card);
+}
+
+.nav-links a.active {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-glow);
+    text-shadow: 0 0 8px var(--accent-glow);
+}
+
+.nav-status {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 0;
+    display: inline-block;
+    animation: blink 1.5s infinite;
+}
+
+.status-dot.online { background: var(--online); box-shadow: 0 0 6px var(--online); }
+.status-dot.offline { background: var(--offline); animation: none; }
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+/* ── Main Layout ───────────────────────────────────── */
+.page {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.page-title {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 16px;
+    color: var(--accent);
+    margin-bottom: 20px;
+    text-shadow: 0 0 10px var(--accent-glow);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.page-title .pixel-icon {
+    font-size: 24px;
+    image-rendering: pixelated;
+}
+
+/* ── Panels ────────────────────────────────────────── */
+.panel {
+    background: var(--bg-panel);
+    border: 3px solid var(--border);
+    margin-bottom: 16px;
+    box-shadow: 0 4px 0 rgba(0,0,0,0.3);
+}
+
+.panel-header {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 10px;
+    color: var(--text);
+    padding: 10px 14px;
+    background: var(--bg-card);
+    border-bottom: 2px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    letter-spacing: 1px;
+}
+
+.panel-body {
+    padding: 14px;
+}
+
+/* ── Grid ──────────────────────────────────────────── */
+.grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+}
+
+.grid-4 {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+}
+
+.grid-dashboard {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+    gap: 16px;
+}
+
+.span-2 { grid-column: span 2; }
+
+/* ── Agent Cards ───────────────────────────────────── */
+.agent-card {
+    background: var(--bg-card);
+    border: 3px solid var(--border);
+    padding: 14px;
+    position: relative;
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+
+.agent-card:hover {
+    border-color: var(--accent);
+}
+
+.agent-card .agent-avatar {
+    width: 48px;
+    height: 48px;
+    image-rendering: pixelated;
+    margin-bottom: 8px;
+}
+
+.agent-name {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 11px;
+    margin-bottom: 4px;
+}
+
+.agent-role {
+    font-size: 16px;
+    color: var(--text-dim);
+}
+
+.agent-state {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 8px;
+    padding: 3px 8px;
+    display: inline-block;
+    margin-top: 6px;
+    letter-spacing: 1px;
+}
+
+.agent-state.WORKING {
+    background: var(--working);
+    color: #000;
+    animation: pulse 1s infinite;
+}
+
+.agent-state.IDLE {
+    background: var(--idle);
+    color: #000;
+}
+
+.agent-state.OFFLINE {
+    background: var(--offline);
+    color: var(--bg-dark);
+}
+
+.agent-state.STARTING {
+    background: var(--muse);
+    color: #000;
+    animation: pulse 0.5s infinite;
+}
+
+.agent-state.DONE {
+    background: var(--done-color);
+    color: #000;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+.agent-task {
+    font-size: 14px;
+    color: var(--text-dim);
+    margin-top: 6px;
+    font-style: italic;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ── Task Pipeline ─────────────────────────────────── */
+.pipeline {
+    display: flex;
+    gap: 0;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.pipeline-stage {
+    text-align: center;
+    padding: 10px 16px;
+    background: var(--bg-card);
+    border: 2px solid var(--border);
+    min-width: 90px;
+}
+
+.pipeline-stage .count {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 20px;
+    color: var(--accent);
+    display: block;
+}
+
+.pipeline-stage .label {
+    font-size: 14px;
+    color: var(--text-dim);
+    margin-top: 4px;
+}
+
+.pipeline-arrow {
+    font-family: 'Press Start 2P', cursive;
+    color: var(--text-dim);
+    font-size: 14px;
+    padding: 0 4px;
+}
+
+/* ── Activity Feed ─────────────────────────────────── */
+.activity-feed {
+    max-height: 300px;
+    overflow-y: auto;
+    font-size: 16px;
+}
+
+.activity-feed::-webkit-scrollbar {
+    width: 6px;
+}
+
+.activity-feed::-webkit-scrollbar-track {
+    background: var(--bg-dark);
+}
+
+.activity-feed::-webkit-scrollbar-thumb {
+    background: var(--border);
+}
+
+.activity-item {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+}
+
+.activity-item:hover {
+    background: var(--bg-card);
+}
+
+.activity-time {
+    color: var(--text-dim);
+    font-size: 14px;
+    white-space: nowrap;
+    min-width: 50px;
+}
+
+.activity-badge {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 7px;
+    padding: 2px 6px;
+    min-width: 45px;
+    text-align: center;
+}
+
+.activity-text {
+    flex: 1;
+}
+
+/* ── Integration Status ────────────────────────────── */
+.integration-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 17px;
+}
+
+.integration-row:last-child {
+    border-bottom: none;
+}
+
+.integration-icon {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 10px;
+    width: 20px;
+    text-align: center;
+}
+
+.integration-icon.ok { color: var(--online); }
+.integration-icon.fail { color: var(--error); }
+
+/* ── Forms ─────────────────────────────────────────── */
+.pixel-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.pixel-form label {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 8px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+}
+
+.pixel-input, .pixel-select, .pixel-textarea {
+    font-family: 'VT323', monospace;
+    font-size: 18px;
+    background: var(--bg-input);
+    border: 2px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    outline: none;
+    transition: border-color 0.15s;
+    width: 100%;
+}
+
+.pixel-input:focus, .pixel-select:focus, .pixel-textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 8px var(--accent-glow);
+}
+
+.pixel-textarea {
+    resize: vertical;
+    min-height: 60px;
+}
+
+.pixel-select {
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238888aa' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 30px;
+}
+
+.pixel-select option {
+    background: var(--bg-dark);
+    color: var(--text);
+}
+
+.pixel-btn {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 10px;
+    padding: 10px 20px;
+    background: var(--accent);
+    color: #000;
+    border: none;
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: all 0.15s;
+    text-transform: uppercase;
+}
+
+.pixel-btn:hover {
+    background: var(--text-bright);
+    box-shadow: 0 0 12px var(--accent-glow);
+}
+
+.pixel-btn:active {
+    transform: translateY(2px);
+}
+
+.pixel-btn.danger {
+    background: var(--error);
+}
+
+.pixel-btn.success {
+    background: var(--online);
+}
+
+.pixel-btn.secondary {
+    background: var(--bg-card);
+    color: var(--text);
+    border: 2px solid var(--border);
+}
+
+.pixel-btn.small {
+    font-size: 8px;
+    padding: 6px 12px;
+}
+
+/* ── Kanban Board ──────────────────────────────────── */
+.kanban {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    padding-bottom: 10px;
+    min-height: 400px;
+}
+
+.kanban-column {
+    min-width: 200px;
+    max-width: 240px;
+    flex-shrink: 0;
+    background: var(--bg-panel);
+    border: 2px solid var(--border);
+}
+
+.kanban-header {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 8px;
+    padding: 8px 10px;
+    background: var(--bg-card);
+    border-bottom: 2px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    letter-spacing: 1px;
+}
+
+.kanban-count {
+    background: var(--accent);
+    color: #000;
+    padding: 1px 6px;
+    font-size: 8px;
+}
+
+.kanban-cards {
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 50px;
+}
+
+.kanban-card {
+    background: var(--bg-dark);
+    border: 2px solid var(--border);
+    padding: 8px 10px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+}
+
+.kanban-card:hover {
+    border-color: var(--accent);
+}
+
+.kanban-card .card-title {
+    font-size: 16px;
+    margin-bottom: 4px;
+}
+
+.kanban-card .card-desc {
+    font-size: 14px;
+    color: var(--text-dim);
+    max-height: 40px;
+    overflow: hidden;
+}
+
+.kanban-card .card-labels {
+    display: flex;
+    gap: 4px;
+    margin-top: 6px;
+}
+
+.card-label {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 7px;
+    padding: 2px 6px;
+    color: #000;
+}
+
+/* ── Output Browser ────────────────────────────────── */
+.output-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.output-item {
+    display: grid;
+    grid-template-columns: 120px 1fr 80px 160px;
+    gap: 12px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    align-items: center;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.output-item:hover {
+    background: var(--bg-card);
+}
+
+.output-agent {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 8px;
+    padding: 3px 8px;
+    text-align: center;
+}
+
+.output-name {
+    font-size: 17px;
+}
+
+.output-size {
+    font-size: 14px;
+    color: var(--text-dim);
+    text-align: right;
+}
+
+.output-time {
+    font-size: 14px;
+    color: var(--text-dim);
+    text-align: right;
+}
+
+.output-preview {
+    background: var(--bg-dark);
+    border: 2px solid var(--border);
+    padding: 16px;
+    margin-top: 12px;
+    max-height: 500px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    font-size: 16px;
+    line-height: 1.6;
+}
+
+/* ── Chat ──────────────────────────────────────────── */
+.chat-container {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 96px);
+}
+
+.chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.chat-messages::-webkit-scrollbar {
+    width: 6px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+    background: var(--border);
+}
+
+.chat-msg {
+    max-width: 70%;
+    padding: 10px 14px;
+    border: 2px solid var(--border);
+    position: relative;
+    font-size: 17px;
+    line-height: 1.5;
+}
+
+.chat-msg.user {
+    align-self: flex-end;
+    background: var(--accent-glow);
+    border-color: var(--accent);
+}
+
+.chat-msg.assistant {
+    align-self: flex-start;
+    background: var(--bg-card);
+}
+
+.chat-msg .chat-sender {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 8px;
+    margin-bottom: 4px;
+    display: block;
+}
+
+.chat-msg.user .chat-sender { color: var(--accent); }
+.chat-msg.assistant .chat-sender { color: var(--navi); }
+
+.chat-msg .chat-time {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-top: 4px;
+    text-align: right;
+}
+
+.chat-input-bar {
+    padding: 12px 16px;
+    background: var(--bg-panel);
+    border-top: 3px solid var(--border);
+    display: flex;
+    gap: 10px;
+}
+
+.chat-input-bar input {
+    flex: 1;
+}
+
+.chat-typing {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 8px;
+    color: var(--text-dim);
+    padding: 4px 16px;
+    animation: blink 1s infinite;
+}
+
+/* ── Settings ──────────────────────────────────────── */
+.settings-section {
+    margin-bottom: 24px;
+}
+
+.settings-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.agent-manage-card {
+    background: var(--bg-card);
+    border: 2px solid var(--border);
+    padding: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.agent-color-dot {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+.agent-manage-info {
+    flex: 1;
+}
+
+.agent-manage-info .name {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 10px;
+}
+
+.agent-manage-info .detail {
+    font-size: 15px;
+    color: var(--text-dim);
+}
+
+/* ── Modal ─────────────────────────────────────────── */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.8);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-overlay.show {
+    display: flex;
+}
+
+.modal {
+    background: var(--bg-panel);
+    border: 3px solid var(--accent);
+    padding: 20px;
+    max-width: 500px;
+    width: 90%;
+    box-shadow: 0 0 30px var(--accent-glow);
+}
+
+.modal-title {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 12px;
+    color: var(--accent);
+    margin-bottom: 16px;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+    justify-content: flex-end;
+}
+
+/* ── Toast ─────────────────────────────────────────── */
+.toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: var(--bg-card);
+    border: 2px solid var(--online);
+    padding: 10px 16px;
+    font-size: 16px;
+    z-index: 300;
+    animation: slideIn 0.3s ease;
+    max-width: 300px;
+}
+
+.toast.error {
+    border-color: var(--error);
+}
+
+@keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+/* ── Responsive ────────────────────────────────────── */
+@media (max-width: 900px) {
+    .grid-2, .grid-4, .grid-dashboard {
+        grid-template-columns: 1fr;
+    }
+    .grid-3 {
+        grid-template-columns: 1fr 1fr;
+    }
+    .span-2 { grid-column: span 1; }
+    .kanban { flex-direction: column; }
+    .kanban-column { max-width: none; }
+    .output-item { grid-template-columns: 80px 1fr; }
+    .output-size, .output-time { display: none; }
+    .settings-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Empty states ──────────────────────────────────── */
+.empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-dim);
+}
+
+.empty-state .pixel-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+    display: block;
+}
+
+.empty-state .message {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 10px;
+    letter-spacing: 1px;
+}
+
+/* ── Loading ───────────────────────────────────────── */
+.loading {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 10px;
+    color: var(--text-dim);
+    text-align: center;
+    padding: 40px;
+    animation: blink 1s infinite;
+}

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NAVAIA Crew HQ — Chat with Navi</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav>
+        <a href="/" class="nav-brand">CREW HQ<span>NAVAIA AI WORKFORCE</span></a>
+        <ul class="nav-links">
+            <li><a href="/">COMMAND</a></li>
+            <li><a href="/office">OFFICE</a></li>
+            <li><a href="/board">BOARD</a></li>
+            <li><a href="/outputs">OUTPUTS</a></li>
+            <li><a href="/chat">CHAT</a></li>
+            <li><a href="/settings">SETTINGS</a></li>
+        </ul>
+        <div class="nav-status">
+            <span class="status-dot" id="conn-dot"></span>
+        </div>
+    </nav>
+
+    <div class="page" style="padding: 0; max-width: 900px;">
+        <div class="chat-container">
+            <!-- Chat header -->
+            <div style="padding: 12px 16px; background: var(--bg-panel); border-bottom: 3px solid var(--border); display: flex; align-items: center; gap: 12px;">
+                <div style="width: 12px; height: 12px; background: var(--navi); box-shadow: 0 0 8px var(--navi);"></div>
+                <div>
+                    <div style="font-family: 'Press Start 2P'; font-size: 11px; color: var(--navi);">NAVI</div>
+                    <div style="font-size: 14px; color: var(--text-dim);">PM Agent — Your AI Team Lead</div>
+                </div>
+                <div style="margin-left: auto; font-size: 14px; color: var(--text-dim);">
+                    Synced with Telegram
+                </div>
+            </div>
+
+            <!-- Messages -->
+            <div class="chat-messages" id="chat-messages">
+                <div class="empty-state">
+                    <span class="pixel-icon" style="color: var(--navi);">&#9673;</span>
+                    <div class="message">CHAT WITH NAVI</div>
+                    <p style="margin-top: 8px; color: var(--text-dim); font-size: 16px;">
+                        Ask questions, give orders, check status.<br>
+                        Same as Telegram — messages sync both ways.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Typing indicator -->
+            <div class="chat-typing" id="typing-indicator" style="display: none;">
+                NAVI IS THINKING...
+            </div>
+
+            <!-- Input -->
+            <div class="chat-input-bar">
+                <input class="pixel-input" id="chat-input" placeholder="Message Navi..." autocomplete="off"
+                    onkeydown="if(event.key==='Enter') sendMessage()">
+                <button class="pixel-btn" onclick="sendMessage()">SEND</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        const messagesEl = document.getElementById('chat-messages');
+        const inputEl = document.getElementById('chat-input');
+        const typingEl = document.getElementById('typing-indicator');
+
+        function renderMessage(msg) {
+            const div = document.createElement('div');
+            div.className = `chat-msg ${msg.role}`;
+
+            const sender = msg.role === 'user' ? 'FOUNDER' : 'NAVI';
+            const time = msg.time ? shortTime(msg.time) : '';
+            const source = msg.source && msg.source !== 'dashboard'
+                ? ` <span style="opacity:0.5;font-size:11px;">[via ${msg.source}]</span>` : '';
+
+            div.innerHTML = `
+                <span class="chat-sender">${sender}</span>
+                <div>${escapeHtml(msg.text)}</div>
+                ${time ? `<div class="chat-time">${time}${source}</div>` : ''}
+            `;
+            return div;
+        }
+
+        function scrollToBottom() {
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+
+        async function loadHistory() {
+            try {
+                const history = await CrewHQ.getChatHistory();
+                if (history.length > 0) {
+                    messagesEl.innerHTML = '';
+                    history.forEach(msg => {
+                        messagesEl.appendChild(renderMessage(msg));
+                    });
+                    scrollToBottom();
+                }
+            } catch (err) {
+                console.error('Chat history error:', err);
+            }
+        }
+
+        async function sendMessage() {
+            const text = inputEl.value.trim();
+            if (!text) return;
+
+            // Clear empty state if present
+            const emptyState = messagesEl.querySelector('.empty-state');
+            if (emptyState) emptyState.remove();
+
+            // Show user message immediately
+            messagesEl.appendChild(renderMessage({ role: 'user', text, time: new Date().toISOString() }));
+            inputEl.value = '';
+            scrollToBottom();
+
+            // Show typing
+            typingEl.style.display = 'block';
+
+            try {
+                const result = await CrewHQ.sendChat(text);
+                typingEl.style.display = 'none';
+
+                const replyText = result.message || result.error || 'No response.';
+                messagesEl.appendChild(renderMessage({
+                    role: 'assistant',
+                    text: replyText,
+                    time: new Date().toISOString(),
+                }));
+
+                if (result.action === 'create_task') {
+                    // Show task creation notification
+                    const taskNote = document.createElement('div');
+                    taskNote.style.cssText = 'text-align: center; padding: 6px; font-family: "Press Start 2P"; font-size: 8px; color: var(--online); border: 1px solid var(--online); margin: 4px 20%;';
+                    taskNote.textContent = `TASK CREATED: ${result.task_title || 'New task'}`;
+                    messagesEl.appendChild(taskNote);
+                }
+
+                scrollToBottom();
+            } catch (err) {
+                typingEl.style.display = 'none';
+                messagesEl.appendChild(renderMessage({
+                    role: 'assistant',
+                    text: 'Connection error. Try again.',
+                    time: new Date().toISOString(),
+                }));
+                scrollToBottom();
+            }
+
+            inputEl.focus();
+        }
+
+        // Init
+        document.addEventListener('DOMContentLoaded', () => {
+            loadHistory();
+            inputEl.focus();
+            CrewHQ.onUpdate(() => {
+                document.getElementById('conn-dot').className = 'status-dot online';
+            });
+        });
+    </script>
+</body>
+</html>

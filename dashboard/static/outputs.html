@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NAVAIA Crew HQ — Outputs</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav>
+        <a href="/" class="nav-brand">CREW HQ<span>NAVAIA AI WORKFORCE</span></a>
+        <ul class="nav-links">
+            <li><a href="/">COMMAND</a></li>
+            <li><a href="/office">OFFICE</a></li>
+            <li><a href="/board">BOARD</a></li>
+            <li><a href="/outputs">OUTPUTS</a></li>
+            <li><a href="/chat">CHAT</a></li>
+            <li><a href="/settings">SETTINGS</a></li>
+        </ul>
+        <div class="nav-status">
+            <span class="status-dot" id="conn-dot"></span>
+        </div>
+    </nav>
+
+    <div class="page">
+        <div class="page-title">
+            <span class="pixel-icon">&#9776;</span> OUTPUTS & FILES
+            <span style="font-family: 'VT323'; font-size: 16px; color: var(--text-dim); margin-left: auto;" id="output-count">Loading...</span>
+        </div>
+
+        <!-- Filter bar -->
+        <div class="panel" style="margin-bottom: 12px;">
+            <div class="panel-body" style="padding: 8px 14px;">
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <span style="font-family: 'Press Start 2P'; font-size: 8px; color: var(--text-dim);">FILTER:</span>
+                    <button class="pixel-btn small secondary filter-btn active" data-filter="all" onclick="filterOutputs('all', this)">ALL</button>
+                    <button class="pixel-btn small secondary filter-btn" data-filter="pm" onclick="filterOutputs('pm', this)" style="border-color: var(--navi);">NAVI</button>
+                    <button class="pixel-btn small secondary filter-btn" data-filter="creative" onclick="filterOutputs('creative', this)" style="border-color: var(--muse);">MUSE</button>
+                    <button class="pixel-btn small secondary filter-btn" data-filter="technical" onclick="filterOutputs('technical', this)" style="border-color: var(--arch);">ARCH</button>
+                    <button class="pixel-btn small secondary filter-btn" data-filter="admin" onclick="filterOutputs('admin', this)" style="border-color: var(--sage);">SAGE</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Output list -->
+        <div class="panel">
+            <div class="panel-header">
+                <div style="display: grid; grid-template-columns: 120px 1fr 80px 160px; gap: 12px; width: 100%;">
+                    <span>AGENT</span><span>FILE</span><span style="text-align: right;">SIZE</span><span style="text-align: right;">MODIFIED</span>
+                </div>
+            </div>
+            <div class="panel-body" style="padding: 0;">
+                <div class="output-list" id="output-list">
+                    <div class="loading">LOADING OUTPUTS...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Preview panel -->
+        <div class="panel" id="preview-panel" style="display: none;">
+            <div class="panel-header" id="preview-header">FILE PREVIEW</div>
+            <div class="panel-body" style="padding: 0;">
+                <div class="output-preview" id="preview-content"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        let allOutputs = [];
+        let currentFilter = 'all';
+
+        async function loadOutputs() {
+            try {
+                allOutputs = await CrewHQ.getOutputs();
+                renderOutputs();
+            } catch (err) {
+                console.error('Output load error:', err);
+            }
+        }
+
+        function filterOutputs(filter, btn) {
+            currentFilter = filter;
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+            renderOutputs();
+        }
+
+        function renderOutputs() {
+            const el = document.getElementById('output-list');
+            const countEl = document.getElementById('output-count');
+
+            const filtered = currentFilter === 'all'
+                ? allOutputs
+                : allOutputs.filter(o => o.agent_id === currentFilter);
+
+            countEl.textContent = `${filtered.length} files`;
+
+            if (!filtered.length) {
+                el.innerHTML = `<div class="empty-state"><span class="pixel-icon">&#9776;</span><div class="message">NO OUTPUTS YET</div></div>`;
+                return;
+            }
+
+            el.innerHTML = filtered.map(o => `
+                <div class="output-item" onclick="previewFile('${escapeHtml(o.path)}', '${escapeHtml(o.name)}', '${escapeHtml(o.agent)}')">
+                    <span class="output-agent" style="background: ${agentColor(o.agent_id)}; color: #000;">${o.agent}</span>
+                    <span class="output-name">${escapeHtml(o.name)}</span>
+                    <span class="output-size">${o.size_kb} KB</span>
+                    <span class="output-time">${timeAgo(o.modified)}</span>
+                </div>
+            `).join('');
+        }
+
+        async function previewFile(path, name, agent) {
+            const panel = document.getElementById('preview-panel');
+            const header = document.getElementById('preview-header');
+            const content = document.getElementById('preview-content');
+
+            panel.style.display = 'block';
+            header.textContent = `${agent} / ${name}`;
+            content.textContent = 'Loading...';
+
+            try {
+                const data = await CrewHQ.getOutputContent(path);
+                if (data.error) {
+                    content.textContent = data.error;
+                } else {
+                    content.textContent = data.content;
+                }
+            } catch (err) {
+                content.textContent = 'Error loading file.';
+            }
+
+            panel.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Load on start
+        document.addEventListener('DOMContentLoaded', () => {
+            loadOutputs();
+            CrewHQ.onUpdate(() => {
+                document.getElementById('conn-dot').className = 'status-dot online';
+            });
+        });
+
+        // Auto-refresh
+        setInterval(loadOutputs, 15000);
+    </script>
+</body>
+</html>

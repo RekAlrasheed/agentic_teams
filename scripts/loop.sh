@@ -38,6 +38,7 @@ source .env
 set +a
 
 export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+# Crew uses 'claude -p' = ephemeral sessions that won't show in --resume
 unset CLAUDECODE
 
 # ── Start Telegram Bridge (once) ────────────────────────────────────────────

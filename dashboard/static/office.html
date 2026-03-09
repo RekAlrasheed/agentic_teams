@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NAVAIA Crew HQ — Pixel Office</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav>
+        <a href="/" class="nav-brand">CREW HQ<span>NAVAIA AI WORKFORCE</span></a>
+        <ul class="nav-links">
+            <li><a href="/">COMMAND</a></li>
+            <li><a href="/office">OFFICE</a></li>
+            <li><a href="/board">BOARD</a></li>
+            <li><a href="/outputs">OUTPUTS</a></li>
+            <li><a href="/chat">CHAT</a></li>
+            <li><a href="/settings">SETTINGS</a></li>
+        </ul>
+        <div class="nav-status">
+            <span class="status-dot" id="conn-dot"></span>
+        </div>
+    </nav>
+
+    <div class="page">
+        <div class="page-title">
+            <span class="pixel-icon">&#9726;</span> PIXEL OFFICE
+        </div>
+
+        <div class="panel">
+            <div class="panel-header">
+                NAVAIA HQ — Floor Plan
+                <span id="office-clock" style="font-family: 'VT323'; font-size: 16px; color: var(--text-dim);"></span>
+            </div>
+            <div class="panel-body" style="padding: 0; overflow: hidden;">
+                <canvas id="office-canvas" width="1008" height="1008" style="width: 100%; image-rendering: pixelated; cursor: pointer;"></canvas>
+            </div>
+        </div>
+
+        <!-- Agent detail panel (appears on click) -->
+        <div id="agent-detail" class="panel" style="display: none;">
+            <div class="panel-header" id="detail-header">AGENT DETAILS</div>
+            <div class="panel-body">
+                <div class="grid-2">
+                    <div>
+                        <div id="detail-info"></div>
+                    </div>
+                    <div>
+                        <form class="pixel-form" onsubmit="assignFromOffice(event)">
+                            <label>ASSIGN TASK</label>
+                            <input class="pixel-input" id="office-task-title" placeholder="Task title...">
+                            <textarea class="pixel-textarea" id="office-task-desc" placeholder="Description..." rows="2"></textarea>
+                            <button type="submit" class="pixel-btn small">ASSIGN</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/office.js"></script>
+</body>
+</html>
