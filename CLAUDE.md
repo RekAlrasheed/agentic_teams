@@ -207,3 +207,38 @@ On every session start:
 ## BATCHING
 
 Status updates to Telegram should be batched — don't send 10 messages for 10 small updates. Batch into one summary every 10-15 minutes during active work.
+
+---
+
+## ECC CAPABILITIES (Everything Claude Code)
+
+ECC is installed globally at `~/.claude/`. It adds development capabilities on top of our agent system.
+
+### Available Slash Commands
+- `/plan` — Structured implementation planning with risk assessment
+- `/tdd` — Test-driven development workflow (tests first, then code)
+- `/orchestrate` — Chain agents: planner → tdd → code-review → security
+- `/code-review` — Code quality assessment
+- `/security-scan` — Security vulnerability scanning (AgentShield)
+- `/verify` — Verification workflow for changes
+- `/quality-gate` — Post-edit quality checks
+- `/learn` — Extract reusable patterns from current session
+- `/evolve` — Evolve learned patterns into skills
+- `/eval` — Run evaluation framework
+- `/model-route` — Smart model routing by task complexity
+- `/checkpoint` — Save session state
+- `/instinct-status` — Check learning system status
+
+### Available Subagents (via Agent tool)
+planner, architect, tdd-guide, code-reviewer, security-reviewer, build-error-resolver, python-reviewer, doc-updater
+
+### Installed Skills (20)
+Coding standards, Python patterns/testing, API design, backend patterns, security review/scan, TDD workflow, deployment patterns, Docker patterns, continuous learning, verification loop, agentic engineering, autonomous loops, cost-aware LLM pipeline, content engine, article writing, investor materials, market research
+
+### How to Use
+- These complement (not replace) your agent behavior rules above
+- Arch should use `/tdd` and `/code-review` for all code tasks
+- Muse can use content-engine and article-writing skills
+- Sage can use investor-materials and market-research skills
+- Navi can use `/plan` and `/orchestrate` for complex task breakdowns
+- Use `/learn` at end of productive sessions to capture patterns
