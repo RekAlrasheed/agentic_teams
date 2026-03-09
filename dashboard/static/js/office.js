@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════
-   NAVAIA CREW HQ — Pixel Office v7
-   Uses Pixel Agents sprites, layout & rendering approach
+   NAVAIA CREW HQ — Pixel Office v8
+   Modern white furniture, Navaia logo, zone-based idle behavior
    ═══════════════════════════════════════════════════════════════ */
 
 const canvas = document.getElementById('office-canvas');
@@ -54,6 +54,46 @@ async function loadAssets() {
     }
   }
   await Promise.all(loads);
+}
+
+/* ── Furniture Modernization ─────────────────────────────── */
+const FURNITURE_MODERNIZE = {
+  'ASSET_NEW_106': 'ASSET_15',   // TABLE_WOOD → COUNTER_PLASTIC_SM (48x32, 3x2)
+  'ASSET_49':      'ASSET_35',   // STOOL → CHAIR_ROTATING_FRONT (16x16, 1x1)
+  'ASSET_17':      'ASSET_23',   // WOODEN_BOOKSHELF_SMALL → WHITE_BOOKSHELF_1 (32x32, 2x2)
+  'ASSET_18':      'ASSET_24',   // FULL_WOODEN_BOOKSHELF → FULL_WHITE_BOOKSHELF_1 (32x32, 2x2)
+};
+
+async function modernizeFurniture() {
+  // Swap old furniture types for modern white equivalents
+  for (const item of FURN_LIST) {
+    if (FURNITURE_MODERNIZE[item.type]) {
+      item.type = FURNITURE_MODERNIZE[item.type];
+    }
+  }
+
+  // Remove meeting room painting (ASSET_102 at col 5, row 0)
+  for (let i = FURN_LIST.length - 1; i >= 0; i--) {
+    if (FURN_LIST[i].type === 'ASSET_102' && FURN_LIST[i].col === 5 && FURN_LIST[i].row === 0) {
+      FURN_LIST.splice(i, 1);
+    }
+  }
+
+  // Inject kitchen appliances
+  FURN_LIST.push({ type: 'ASSET_55', col: 15, row: 10 });  // COFFEE_MACHINE
+  FURN_LIST.push({ type: 'ASSET_151', col: 16, row: 10 }); // MICROWAVE
+
+  // Load images for any new/swapped furniture types
+  const loads = [];
+  const seen = new Set();
+  for (const item of FURN_LIST) {
+    const m = CATALOG[item.type];
+    if (m && m.file && !IMG['f_' + item.type] && !seen.has(item.type)) {
+      seen.add(item.type);
+      loads.push(loadImg('f_' + item.type, PA + m.file));
+    }
+  }
+  if (loads.length) await Promise.all(loads);
 }
 
 /* ── Agent config ──────────────────────────────────────────── */
@@ -142,10 +182,12 @@ function charObjs() {
     const cfg = AGENT_CFG[a.id]; if (!cfg) continue;
     const sheet = IMG[cfg.sprite]; if (!sheet) continue;
     const s = getSim(a.id), as = a.state || 'OFFLINE';
-    const sitting = s.st === 'sit', walking = s.st === 'walk';
+    const sitting = s.st === 'sit' || s.st === 'idle_sit', walking = s.st === 'walk';
 
     let dir = s.dir, fi = 0;
-    if (sitting && (as === 'WORKING' || as === 'STARTING')) {
+    if (s.st === 'idle_sit') {
+      dir = s._sitDir || 'down'; fi = Math.floor(frame / 30) % 2;
+    } else if (sitting && (as === 'WORKING' || as === 'STARTING')) {
       dir = 'up'; fi = (Math.floor(frame / 12) % 2) + 1;
     } else if (walking) {
       fi = s.wf % 7;
@@ -238,6 +280,18 @@ function drawOverlays() {
     }
   }
 
+  // Navaia logo — meeting room wall (row 1, cols 3-8)
+  const logoX = 3 * T, logoY = 1 * T;
+  const logoW = 5 * T, logoH = T;
+  ctx.fillStyle = '#0a0e16dd';
+  ctx.fillRect(logoX + 4, logoY + 4, logoW - 8, logoH - 8);
+  ctx.strokeStyle = '#4a9eff'; ctx.lineWidth = 2;
+  ctx.strokeRect(logoX + 4, logoY + 4, logoW - 8, logoH - 8);
+  ctx.font = '14px "Press Start 2P"'; ctx.fillStyle = '#4a9eff';
+  ctx.textAlign = 'center';
+  ctx.fillText('NAVAIA', logoX + logoW / 2, logoY + logoH / 2 + 5);
+  ctx.textAlign = 'left';
+
   // Branding
   ctx.font = '10px "Press Start 2P"'; ctx.fillStyle = '#4a9eff88';
   ctx.textAlign = 'center';
@@ -296,21 +350,76 @@ function findPath(fc, fr, tc, tr) {
   return [];
 }
 
-// Points of interest for wandering
-const POI = [
-  { c: 6, r: 4 }, { c: 5, r: 6 },   // meeting room
-  { c: 5, r: 9 }, { c: 6, r: 9 },    // corridor
-  { c: 14, r: 12 }, { c: 16, r: 12 }, // kitchen
-  { c: 6, r: 12 }, { c: 2, r: 17 },   // office floor
-  { c: 9, r: 17 }, { c: 7, r: 13 },
-  { c: 15, r: 18 }, { c: 17, r: 19 }, // right rooms
-];
+// Weighted zone system for idle behavior
+const ZONES = {
+  lounge: {
+    weight: 0.45,
+    chatChance: 0.08,
+    pois: [
+      { c: 14, r: 18, sit: 'left' },   // lounge chair
+      { c: 17, r: 18, sit: 'right' },  // lounge chair
+      { c: 15, r: 19 },                // coffee table area
+      { c: 16, r: 19 },                // coffee table area
+      { c: 14, r: 20 },                // lounge area
+      { c: 17, r: 20 },                // lounge area
+    ],
+    chats: ['nice chair!', 'break time', 'so comfy', "how's work?"],
+  },
+  kitchen: {
+    weight: 0.35,
+    chatChance: 0.08,
+    pois: [
+      { c: 14, r: 12 },  // vending machine area
+      { c: 16, r: 12 },  // counter area
+      { c: 15, r: 11 },  // coffee machine area
+      { c: 16, r: 11 },  // microwave area
+      { c: 17, r: 11 },  // fridge area
+      { c: 14, r: 11 },  // kitchen floor
+    ],
+    chats: ['coffee?', 'mmm snacks', 'hungry!', 'need caffeine'],
+  },
+  meeting: {
+    weight: 0.05,
+    chatChance: 0.015,
+    pois: [
+      { c: 6, r: 4 },
+      { c: 5, r: 6 },
+    ],
+    chats: ['meeting?', 'PR review?', 'deadline?', 'great idea'],
+  },
+  office: {
+    weight: 0.15,
+    chatChance: 0.015,
+    pois: [
+      { c: 5, r: 9 },   // corridor
+      { c: 6, r: 9 },   // corridor
+      { c: 6, r: 12 },  // office floor
+      { c: 7, r: 13 },  // office floor
+    ],
+    chats: ['nice work!', 'on it!', 'bug found', 'deploying..'],
+  },
+};
 
-const CHATS = [
-  'coffee?', 'nice work!', 'deadline?', 'PR review?',
-  'lunch?', 'on it!', 'bug found', 'deploying..',
-  'great idea', 'almost done', 'meeting?', 'help?',
-];
+function pickZonePOI() {
+  const r = Math.random();
+  let cum = 0;
+  for (const [name, zone] of Object.entries(ZONES)) {
+    cum += zone.weight;
+    if (r <= cum) {
+      const poi = zone.pois[Math.floor(Math.random() * zone.pois.length)];
+      return { ...poi, zone: name, chatChance: zone.chatChance };
+    }
+  }
+  const z = ZONES.office;
+  const poi = z.pois[Math.floor(Math.random() * z.pois.length)];
+  return { ...poi, zone: 'office', chatChance: z.chatChance };
+}
+
+function zoneChatLine(zoneName) {
+  const z = ZONES[zoneName];
+  if (!z) return 'hey!';
+  return z.chats[Math.floor(Math.random() * z.chats.length)];
+}
 
 /* ── Character State ───────────────────────────────────────── */
 let agentData = [], selectedAgent = null, frame = 0;
@@ -350,26 +459,32 @@ function updSim(id, as, dt) {
     s.col = cfg.sCol; s.row = cfg.sRow; s.x = s.col * T + T / 2; s.y = s.row * T + T / 2;
     s.st = 'sit'; s.dir = 'down'; s.path = [];
   } else {
-    if (s.st === 'sit') {
+    if (s.st === 'sit' || s.st === 'idle_sit') {
       s.it -= dt;
       if (s.it <= 0) {
-        const t = POI[Math.floor(Math.random() * POI.length)];
+        const t = pickZonePOI();
         const pp = findPath(s.col, s.row, t.c, t.r);
-        if (pp.length) { s.path = pp; s.pi = 0; s.mp = 0; s.st = 'walk'; s.wc++; }
+        if (pp.length) {
+          s.path = pp; s.pi = 0; s.mp = 0; s.st = 'walk'; s.wc++;
+          s._destPOI = t;
+        }
         s.it = 3 + Math.random() * 5;
       }
     } else if (s.st === 'stand' || s.st === 'chat') {
       s.it -= dt; s.ct -= dt;
       if (s.ct <= 0) s.st = 'stand';
       if (s.it <= 0) {
-        if (s.wc > 2 + Math.floor(Math.random() * 3)) {
+        if (s.wc > 4 + Math.floor(Math.random() * 3)) {
           const pp = findPath(s.col, s.row, cfg.sCol, cfg.sRow);
           if (pp.length) { s.path = pp; s.pi = 0; s.mp = 0; s.st = 'walk'; s._goSeat = true; }
           s.wc = 0;
         } else {
-          const t = POI[Math.floor(Math.random() * POI.length)];
+          const t = pickZonePOI();
           const pp = findPath(s.col, s.row, t.c, t.r);
-          if (pp.length) { s.path = pp; s.pi = 0; s.mp = 0; s.st = 'walk'; s._goSeat = false; s.wc++; }
+          if (pp.length) {
+            s.path = pp; s.pi = 0; s.mp = 0; s.st = 'walk'; s._goSeat = false; s.wc++;
+            s._destPOI = t;
+          }
         }
         s.it = 2 + Math.random() * 4;
       }
@@ -396,8 +511,12 @@ function updSim(id, as, dt) {
       s.x = s.col * T + T / 2; s.y = s.row * T + T / 2;
       if (s._goSeat && s.col === cfg.sCol && s.row === cfg.sRow) {
         s.st = 'sit'; s.dir = 'down'; s.it = 4 + Math.random() * 6;
+      } else if (s._destPOI && s._destPOI.sit) {
+        s.st = 'idle_sit'; s._sitDir = s._destPOI.sit; s.dir = s._destPOI.sit;
+        s._zone = s._destPOI.zone; s.it = 4 + Math.random() * 6;
       } else {
         s.st = 'stand'; s.dir = 'down'; s.it = 2 + Math.random() * 4;
+        s._zone = s._destPOI ? s._destPOI.zone : 'office';
       }
       s.path = [];
     }
@@ -405,15 +524,16 @@ function updSim(id, as, dt) {
     s.x = s.col * T + T / 2; s.y = s.row * T + T / 2;
   }
 
-  // Social
-  if (s.st === 'stand') {
+  // Social — zone-aware chat
+  if (s.st === 'stand' || s.st === 'idle_sit') {
+    const chatChance = (s._zone === 'lounge' || s._zone === 'kitchen') ? 0.08 : 0.015;
     for (const oid of Object.keys(AGENT_CFG)) {
       if (oid === id) continue;
       const o = sim[oid];
       if (!o || o.st === 'sit' || o.st === 'walk') continue;
-      if (Math.abs(s.col - o.col) + Math.abs(s.row - o.row) <= 2 && Math.random() < 0.015) {
+      if (Math.abs(s.col - o.col) + Math.abs(s.row - o.row) <= 2 && Math.random() < chatChance) {
         s.st = 'chat'; s.ct = 2 + Math.random() * 3;
-        s.cl = CHATS[Math.floor(Math.random() * CHATS.length)];
+        s.cl = zoneChatLine(s._zone || 'office');
         if (o.col > s.col) s.dir = 'right'; else if (o.col < s.col) s.dir = 'left';
         else if (o.row > s.row) s.dir = 'down'; else s.dir = 'up';
       }
@@ -507,10 +627,10 @@ async function assignFromOffice(e) {
 /* ── Init ──────────────────────────────────────────────────── */
 requestAnimationFrame(loop);
 
-loadAssets().then(() => {
+loadAssets().then(() => modernizeFurniture()).then(() => {
   buildNavGrid();
   assetsReady = true;
-  console.log('Pixel Office v7: Loaded', loadCount, 'assets using Pixel Agents sprites');
+  console.log('Pixel Office v8: Loaded', loadCount, 'assets — modern white furniture');
 });
 
 CrewHQ.onUpdate(state => {
