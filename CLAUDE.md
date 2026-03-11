@@ -45,6 +45,17 @@ When assigning tasks to multiple teammates, they should all work simultaneously.
 ### Rule 6: STOP when there's no work
 If inbox, active, and from-founder folders are ALL empty — there is nothing to do. **Exit the session immediately** to save tokens. The loop script will restart you when new tasks arrive. Do NOT idle, do NOT poll, do NOT burn tokens waiting. Just exit.
 
+### Rule 7: ALWAYS use feature branches for ANY code changes
+**NEVER commit directly to main.** Every change — no matter how small — follows this workflow:
+1. **Branch:** Create `feature/{desc}`, `fix/{desc}`, or `hotfix/{desc}` from main
+2. **Work:** Make all changes on the branch
+3. **Test:** Verify everything works (syntax checks, run tests, manual verification)
+4. **Merge:** Only after tests pass, merge to main (`git merge --no-edit`)
+5. **Push:** Push main to remote
+6. **Clean up:** Delete the feature branch (`git branch -d feature/{desc}`)
+
+This applies to **ALL agents** — Navi, Arch, and any Claude session making code changes. No exceptions.
+
 ---
 
 ## TOKEN COST MANAGEMENT (CRITICAL)

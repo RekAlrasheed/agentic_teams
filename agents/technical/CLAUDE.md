@@ -27,10 +27,16 @@
 - **Languages:** Python, TypeScript/JavaScript, Bash
 
 ## Working Standards
-- **Git workflow:** Always branch — never commit to main directly
+- **Git workflow (MANDATORY — no exceptions):**
+  1. `git checkout -b feature/{desc}` (or `fix/`, `hotfix/`) from main
+  2. Make all changes on the branch — NEVER commit directly to main
+  3. Test everything: syntax checks, run tests, verify functionality
+  4. Only after tests pass: `git checkout main && git merge feature/{desc} --no-edit`
+  5. Push: `git push origin main`
+  6. Clean up: `git branch -d feature/{desc}`
   - Branch naming: `feature/{desc}`, `fix/{desc}`, `hotfix/{desc}`
   - Write clear commit messages
-  - Open PRs for review
+  - Open PRs for review when collaborating with humans
 - **Testing:** Write tests for critical paths
 - **Code quality:** Clean, documented, following existing project conventions
 - **Deployments:**
