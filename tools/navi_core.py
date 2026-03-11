@@ -109,18 +109,40 @@ def _count_files(directory: Path) -> int:
 
 
 def get_system_status() -> str:
-    try:
-        result = subprocess.run(["pgrep", "-f", "claude"], capture_output=True, text=True)
-        agents_online = result.returncode == 0
-    except Exception:
-        agents_online = False
+    agent_task_dirs = {
+        "pm": [INBOX_DIR, ACTIVE_DIR],
+        "creative": [TASKS_DIR / "creative"],
+        "technical": [TASKS_DIR / "technical"],
+        "admin": [TASKS_DIR / "admin"],
+    }
+    agent_states = []
+    for aid, dirs in agent_task_dirs.items():
+        lock = Path(f"/tmp/navaia-{aid}-working")
+        task_count = sum(_count_files(d) for d in dirs)
+        try:
+            loop_check = subprocess.run(
+                ["pgrep", "-f", f"agent-loop.sh {aid}"],
+                capture_output=True, text=True, timeout=2,
+            )
+            loop_up = loop_check.returncode == 0 and loop_check.stdout.strip()
+        except Exception:
+            loop_up = False
+
+        if lock.exists():
+            agent_states.append(f"{aid}: WORKING ({task_count} tasks)")
+        elif task_count > 0:
+            agent_states.append(f"{aid}: STARTING ({task_count} tasks)")
+        elif loop_up:
+            agent_states.append(f"{aid}: IDLE")
+        else:
+            agent_states.append(f"{aid}: OFFLINE")
 
     inbox = _count_files(INBOX_DIR)
     active = _count_files(ACTIVE_DIR)
     done = _count_files(DONE_DIR)
     blocked = _count_files(BLOCKED_DIR)
 
-    status = f"Agents: {'ONLINE' if agents_online else 'OFFLINE (auto-restart when tasks arrive)'}\n"
+    status = "Agents: " + ", ".join(agent_states) + "\n"
     status += f"Tasks — Inbox: {inbox}, Active: {active}, Done: {done}, Blocked: {blocked}"
     return status
 
@@ -235,83 +257,65 @@ def trello_get_board_summary() -> str:
 
 # ── System Prompt ────────────────────────────────────────────────────────────
 
-SYSTEM_PROMPT_TEMPLATE = """You are Navaia's AI assistant. You chat with the Founder (CEO) of Navaia.
+SYSTEM_PROMPT_TEMPLATE = """You are Navaia's AI assistant chatting with the Founder (CEO).
 
-YOUR ROLE:
-- You are the Founder's smart assistant. Answer questions, discuss ideas, help with tasks.
-- You manage the AI Workforce (4 agents: Navi/PM, Muse/Creative, Arch/Technical, Sage/Admin).
-- You decide intelligently what to do with each message.
+ROLE: Smart assistant managing 4 AI agents (Navi/PM, Muse/Creative, Arch/Technical, Sage/Admin).
+COMPANY: Navaia — AI-powered real estate tech in Riyadh, products Bilal (voice) and Baian (chat).
 
-RESPONSE FORMAT:
-You MUST respond with valid JSON only. No other text before or after the JSON.
-Use this exact format:
+RESPOND WITH JSON ONLY. Choose ONE format:
 
-{{"action": "reply|create_task|ask_clarification", "message": "Your response text to show the Founder", "task_title": "Short task title (only if action=create_task)", "task_description": "Detailed task description (only if action=create_task)", "agent": "PM|Creative|Technical|Admin (only if action=create_task)", "priority": "high|medium|low (only if action=create_task)"}}
+SINGLE TASK:
+{{"action": "create_task", "message": "Your response", "task_title": "title", "task_description": "description", "agent": "PM|Creative|Technical|Admin"}}
 
-WHEN TO USE EACH ACTION:
-- "reply": For greetings, questions, status checks, discussions, quick answers, opinions, advice.
-  Most messages should be "reply". The Founder doesn't want every message to become a task.
-- "ask_clarification": When the Founder asks for work but you need details before creating a task.
-- "create_task": ONLY when you have a clear, actionable task with enough detail to execute.
-  The Founder explicitly wants something done, and you have enough context.
+MULTIPLE TASKS (use when Founder wants work for several agents):
+{{"action": "create_tasks", "message": "Your response", "tasks": [{{"title": "task1", "description": "desc1", "agent": "Technical"}}, {{"title": "task2", "description": "desc2", "agent": "Admin"}}]}}
 
-IMPORTANT RULES:
-1. Be conversational and natural. You're chatting with the CEO — be smart, concise, helpful.
-2. Answer in the same language as the Founder's message (English or Arabic).
-3. Keep messages short — the Founder reads on mobile. Under 200 words for replies.
-4. Don't create tasks for questions, greetings, status checks, or casual chat.
-5. When creating a task, give a clear confirmation with what you understood.
-6. If the Founder says "yes", "go ahead", "approved", "do it" — check conversation history for what they're confirming, and create the task.
-7. For status questions, use the live system data provided.
-8. You know Navaia's business: AI-powered real estate tech in Riyadh, products Bilal (voice) and Baian (chat), clients in pilot stage.
+REPLY ONLY (no task):
+{{"action": "reply", "message": "Your response"}}
 
-CURRENT SYSTEM STATE:
+AGENT ROUTING — dispatch directly to the right agent:
+- Creative (Muse): content, campaigns, outreach, brand, social media, writing
+- Technical (Arch): code, bugs, deploy, infra, APIs, GitHub, architecture
+- Admin (Sage): docs, proposals, research, finance, compliance, contracts
+- PM: only for coordination tasks that span multiple agents
+
+CRITICAL: When Founder asks to activate agents or assign work, create tasks DIRECTLY for each agent using "create_tasks". Do NOT create a single PM task asking PM to dispatch — route tasks directly to agents.
+
+RULES:
+- "reply" for most messages (greetings, questions, chat). "create_task"/"create_tasks" for work requests.
+- Be concise (<200 words). Same language as Founder (English or Arabic).
+- If Founder says "yes"/"go ahead" — check history for what they're confirming.
+
 {system_status}
-
-TRELLO BOARD:
-{trello_state}
-
-RECENT OUTPUTS:
 {recent_outputs}
-
-ACTIVE TASKS:
 {active_tasks}
 
-CONVERSATION HISTORY:
-{conversation_history}
-
-COMPANY KNOWLEDGE (summary):
-{knowledge_summary}"""
+CONVERSATION:
+{conversation_history}"""
 
 
 def _build_system_prompt() -> str:
-    """Build the full system prompt with live context."""
+    """Build a lean system prompt — fast to generate, small token footprint."""
     system_status = get_system_status()
-    trello_state = trello_get_board_summary() if trello_enabled() else "Trello not configured."
-    recent_outputs = get_recent_outputs(5)
+    recent_outputs = get_recent_outputs(3)
     active_tasks = get_active_task_details()
-    knowledge = get_knowledge_summary()
 
-    # Conversation history from shared JSONL
-    history = load_history(10)
+    history = load_history(5)
     if history:
         lines = []
         for m in history:
             prefix = "Founder" if m["role"] == "user" else "Navi"
-            source_tag = f" [{m.get('source', 'unknown')}]" if m.get("source") else ""
-            text = m.get("text", "")[:200]
-            lines.append(f"[{m.get('time', '')}] {prefix}{source_tag}: {text}")
+            text = m.get("text", "")[:150]
+            lines.append(f"{prefix}: {text}")
         conv_history = "\n".join(lines)
     else:
         conv_history = "No previous messages."
 
     return SYSTEM_PROMPT_TEMPLATE.format(
         system_status=system_status,
-        trello_state=trello_state,
         recent_outputs=recent_outputs,
         active_tasks=active_tasks,
         conversation_history=conv_history,
-        knowledge_summary=knowledge[:2000],
     )
 
 
@@ -409,17 +413,11 @@ def create_task(title: str, description: str, agent: str = "PM", source: str = "
 # ── Claude CLI Calls ─────────────────────────────────────────────────────────
 
 def _detect_max_turns(message: str) -> str:
-    """Return '5' for execution-type requests, '3' for normal chat."""
-    execution_keywords = [
-        "check ", "look at ", "read ", "show me ", "what's in ",
-        "run ", "execute ", "deploy ", "create ", "build ",
-        "git ", "commit", "push", "pull",
-    ]
-    msg_lower = message.lower()
-    for kw in execution_keywords:
-        if kw in msg_lower:
-            return "5"
-    return "3"
+    """Return '1' for chat — the bot responds in a single turn.
+
+    Multi-turn tool use is unnecessary for a chatbot and causes timeouts.
+    """
+    return "1"
 
 
 def _detect_model(message: str) -> str:
@@ -466,42 +464,49 @@ def _detect_model(message: str) -> str:
 
 
 def _call_claude(message: str, system_prompt: str, model: str, max_turns: str) -> str:
-    """Shared Claude CLI invocation. Returns raw stdout text."""
+    """Shared Claude CLI invocation. Returns raw response text."""
     env = os.environ.copy()
     env.pop("CLAUDECODE", None)
 
     proc = subprocess.run(
-        ["claude", "-p", "--", message,
+        ["claude", "-p",
          "--model", model,
          "--max-turns", max_turns,
          "--output-format", "text",
-         "--system-prompt", system_prompt],
-        capture_output=True, text=True, timeout=60,
+         "--system-prompt", system_prompt,
+         "--", message],
+        capture_output=True, text=True, timeout=30,
         env=env, cwd=str(REPO_ROOT),
     )
-    return proc.stdout.strip()
+    raw = proc.stdout.strip()
+    if not raw:
+        raw = proc.stderr.strip()
+    return raw
 
 
 async def _call_claude_async(message: str, system_prompt: str, model: str, max_turns: str) -> str:
-    """Shared async Claude CLI invocation. Returns raw stdout text."""
+    """Shared async Claude CLI invocation. Returns raw response text."""
     env = os.environ.copy()
     env.pop("CLAUDECODE", None)
 
     proc = await asyncio.create_subprocess_exec(
-        "claude", "-p", "--", message,
+        "claude", "-p",
         "--model", model,
         "--max-turns", max_turns,
         "--output-format", "text",
         "--system-prompt", system_prompt,
+        "--", message,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         env=env,
         cwd=str(REPO_ROOT),
     )
-    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
     raw = stdout.decode("utf-8").strip()
     if not raw:
-        logger.warning(f"Claude empty response. stderr: {stderr.decode()[:200]}")
+        raw = stderr.decode("utf-8").strip()
+        if raw:
+            logger.info("Claude response came via stderr")
     return raw
 
 
@@ -515,7 +520,7 @@ def _handle_response(raw: str, message: str, source: str) -> dict:
     result = _parse_response(raw)
     reply_text = result.get("message", raw[:4000])
 
-    # Handle task creation
+    # Handle single task creation
     if result.get("action") == "create_task":
         title = result.get("task_title", message[:80])
         desc = result.get("task_description", message)
@@ -523,72 +528,125 @@ def _handle_response(raw: str, message: str, source: str) -> dict:
         trello_id = create_task(title, desc, agent, source)
         if trello_id:
             reply_text += "\n\n📋 Added to Trello → Inbox"
-            result["message"] = reply_text
 
+    # Handle multi-task creation (dispatches directly to agent folders)
+    elif result.get("action") == "create_tasks":
+        tasks = result.get("tasks", [])
+        created = []
+        for t in tasks:
+            if not isinstance(t, dict):
+                continue
+            title = t.get("title", "Untitled task")
+            desc = t.get("description", "")
+            agent = t.get("agent", "PM")
+            trello_id = create_task(title, desc, agent, source)
+            created.append(f"{agent}: {title}")
+            logger.info(f"Multi-task dispatched → {agent}: {title}")
+        if created:
+            reply_text += "\n\n📋 Tasks dispatched:\n" + "\n".join(f"• {c}" for c in created)
+
+    result["message"] = reply_text
     save_message("assistant", reply_text, source)
     return result
 
 
 def ask_sync(message: str, source: str = "dashboard") -> dict:
-    """Synchronous Claude call — used by Dashboard (subprocess.run)."""
+    """Synchronous Claude call — used by Dashboard (subprocess.run).
+
+    On timeout or empty response, retries once with a minimal prompt.
+    """
     save_message("user", message, source)
     system_prompt = _build_system_prompt()
     max_turns = _detect_max_turns(message)
     model = _detect_model(message)
     logger.info(f"Model routing: '{model}' for message: {message[:80]}")
 
-    try:
-        raw = _call_claude(message, system_prompt, model, max_turns)
-        return _handle_response(raw, message, source)
+    for attempt in range(2):
+        try:
+            prompt = system_prompt if attempt == 0 else _RETRY_SYSTEM_PROMPT
+            raw = _call_claude(message, prompt, model, max_turns)
+            if raw:
+                return _handle_response(raw, message, source)
+            if attempt == 0:
+                logger.warning("Empty response, retrying with minimal prompt")
+                continue
+            reply = "I'm having trouble right now. Try again in a moment."
+            save_message("assistant", reply, source)
+            return {"action": "reply", "message": reply}
 
-    except subprocess.TimeoutExpired:
-        reply = "I'm taking too long to think. Try a simpler question."
-        save_message("assistant", reply, source)
-        return {"action": "reply", "message": reply}
-    except FileNotFoundError:
-        reply = "Claude CLI not found. Make sure it's installed and in PATH."
-        save_message("assistant", reply, source)
-        return {"action": "reply", "message": reply}
-    except json.JSONDecodeError:
-        reply = "I got a response I couldn't understand. Try again?"
-        save_message("assistant", reply, source)
-        return {"action": "reply", "message": reply}
-    except Exception as e:
-        logger.error(f"NaviCore ask_sync error: {type(e).__name__}")
-        reply = "Something went wrong on my end. Try again?"
-        save_message("assistant", reply, source)
-        return {"action": "reply", "message": reply}
+        except subprocess.TimeoutExpired:
+            if attempt == 0:
+                logger.warning("Claude timed out (30s), retrying with minimal prompt")
+                continue
+            reply = "I'm taking too long to respond. Try a shorter message?"
+            save_message("assistant", reply, source)
+            return {"action": "reply", "message": reply}
+        except FileNotFoundError:
+            reply = "Claude CLI not found."
+            save_message("assistant", reply, source)
+            return {"action": "reply", "message": reply}
+        except Exception as e:
+            logger.error(f"NaviCore ask_sync error: {type(e).__name__}")
+            if attempt == 0:
+                continue
+            reply = "Something went wrong on my end. Try again?"
+            save_message("assistant", reply, source)
+            return {"action": "reply", "message": reply}
+
+    reply = "I couldn't process that. Try again?"
+    save_message("assistant", reply, source)
+    return {"action": "reply", "message": reply}
+
+
+_RETRY_SYSTEM_PROMPT = (
+    'You are Navaia\'s AI assistant. Respond with JSON: '
+    '{"action": "reply", "message": "your reply"}. Be concise.'
+)
 
 
 async def ask_async(message: str, source: str = "telegram") -> dict:
-    """Async Claude call — used by Telegram bot (asyncio subprocess)."""
+    """Async Claude call — used by Telegram bot (asyncio subprocess).
+
+    On timeout or empty response, retries once with a minimal prompt.
+    """
     save_message("user", message, source)
     system_prompt = _build_system_prompt()
     max_turns = _detect_max_turns(message)
     model = _detect_model(message)
     logger.info(f"Model routing: '{model}' for message: {message[:80]}")
 
-    try:
-        raw = await _call_claude_async(message, system_prompt, model, max_turns)
-        return _handle_response(raw, message, source)
+    for attempt in range(2):
+        try:
+            prompt = system_prompt if attempt == 0 else _RETRY_SYSTEM_PROMPT
+            raw = await _call_claude_async(message, prompt, model, max_turns)
+            if raw:
+                return _handle_response(raw, message, source)
+            if attempt == 0:
+                logger.warning("Empty response, retrying with minimal prompt")
+                continue
+            reply = "I'm having trouble right now. Try again in a moment."
+            save_message("assistant", reply, source)
+            return {"action": "reply", "message": reply}
 
-    except json.JSONDecodeError:
-        logger.warning("Claude non-JSON response, using as plain reply")
-        reply = "I got a response I couldn't understand. Try again?"
-        save_message("assistant", reply, source)
-        return {"action": "reply", "message": reply}
-    except asyncio.TimeoutError:
-        logger.error("Claude CLI timed out (60s)")
-        reply = "I'm taking too long to think. Let me try a simpler answer — what do you need?"
-        save_message("assistant", reply, source)
-        return {"action": "reply", "message": reply}
-    except FileNotFoundError:
-        logger.error("Claude CLI not found")
-        reply = "My AI brain isn't connected right now. The team can check the setup."
-        save_message("assistant", reply, source)
-        return {"action": "reply", "message": reply}
-    except Exception as e:
-        logger.error(f"NaviCore ask_async error: {type(e).__name__}")
-        reply = "Something went wrong on my end. Try again?"
-        save_message("assistant", reply, source)
-        return {"action": "reply", "message": reply}
+        except asyncio.TimeoutError:
+            if attempt == 0:
+                logger.warning("Claude timed out (30s), retrying with minimal prompt")
+                continue
+            reply = "I'm taking too long to respond. Try a shorter message?"
+            save_message("assistant", reply, source)
+            return {"action": "reply", "message": reply}
+        except FileNotFoundError:
+            reply = "My AI brain isn't connected right now."
+            save_message("assistant", reply, source)
+            return {"action": "reply", "message": reply}
+        except Exception as e:
+            logger.error(f"NaviCore ask_async error: {type(e).__name__}")
+            if attempt == 0:
+                continue
+            reply = "Something went wrong on my end. Try again?"
+            save_message("assistant", reply, source)
+            return {"action": "reply", "message": reply}
+
+    reply = "I couldn't process that. Try again?"
+    save_message("assistant", reply, source)
+    return {"action": "reply", "message": reply}
