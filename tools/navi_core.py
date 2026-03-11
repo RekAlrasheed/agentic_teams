@@ -52,7 +52,10 @@ _TRIM_TARGET = 500
 # ── Conversation History (file-based, process-safe) ─────────────────────────
 
 def save_message(role: str, text: str, source: str = "dashboard") -> dict:
-    """Append a message to the shared JSONL history with file locking."""
+    """Append a message to the shared JSONL history with file locking.
+
+    Trim check runs inside the same lock to prevent race conditions.
+    """
     msg = {
         "role": role,
         "text": text,
@@ -60,12 +63,17 @@ def save_message(role: str, text: str, source: str = "dashboard") -> dict:
         "time": datetime.now(timezone.utc).isoformat(),
     }
     CHAT_LOG.parent.mkdir(parents=True, exist_ok=True)
-    with open(CHAT_LOG, "a") as f:
+    with open(CHAT_LOG, "a+") as f:
         fcntl.flock(f, fcntl.LOCK_EX)
         f.write(json.dumps(msg) + "\n")
-        fcntl.flock(f, fcntl.LOCK_UN)
-
-    _maybe_trim()
+        # Trim inside the same lock to prevent race conditions
+        f.seek(0)
+        lines = f.readlines()
+        if len(lines) > _TRIM_THRESHOLD:
+            f.seek(0)
+            f.truncate()
+            f.writelines(lines[-_TRIM_TARGET:])
+        # Lock released automatically when f is closed
     return msg
 
 
@@ -77,7 +85,7 @@ def load_history(limit: int = 50) -> list[dict]:
         with open(CHAT_LOG, "r") as f:
             fcntl.flock(f, fcntl.LOCK_SH)
             lines = f.readlines()
-            fcntl.flock(f, fcntl.LOCK_UN)
+            # Lock released automatically when f is closed
     except Exception:
         return []
 
@@ -87,26 +95,9 @@ def load_history(limit: int = 50) -> list[dict]:
         if line:
             try:
                 messages.append(json.loads(line))
-            except Exception:
-                pass
+            except json.JSONDecodeError as e:
+                logger.warning(f"Skipping corrupt JSONL line: {e}")
     return messages
-
-
-def _maybe_trim():
-    """Auto-trim JSONL when it exceeds threshold."""
-    if not CHAT_LOG.exists():
-        return
-    try:
-        with open(CHAT_LOG, "r+") as f:
-            fcntl.flock(f, fcntl.LOCK_EX)
-            lines = f.readlines()
-            if len(lines) > _TRIM_THRESHOLD:
-                f.seek(0)
-                f.truncate()
-                f.writelines(lines[-_TRIM_TARGET:])
-            fcntl.flock(f, fcntl.LOCK_UN)
-    except Exception as e:
-        logger.warning(f"History trim failed: {e}")
 
 
 # ── Context Builders ─────────────────────────────────────────────────────────
@@ -114,7 +105,7 @@ def _maybe_trim():
 def _count_files(directory: Path) -> int:
     if not directory.exists():
         return 0
-    return len([f for f in directory.iterdir() if f.is_file() and f.name != ".gitkeep"])
+    return sum(1 for f in directory.iterdir() if f.is_file() and f.name != ".gitkeep")
 
 
 def get_system_status() -> str:
@@ -185,7 +176,7 @@ def trello_enabled() -> bool:
     return bool(TRELLO_KEY and TRELLO_TOKEN and TRELLO_BOARD_ID)
 
 
-def _trello_api(method: str, endpoint: str, params: dict = None) -> dict | list:
+def _trello_api(method: str, endpoint: str, params: Optional[dict] = None) -> dict | list:
     if not trello_enabled():
         return {}
     base = "https://api.trello.com/1"
@@ -194,31 +185,31 @@ def _trello_api(method: str, endpoint: str, params: dict = None) -> dict | list:
     query = urllib.parse.urlencode(all_params)
     url = f"{base}/{endpoint}?{query}"
     try:
-        req = urllib.request.Request(url, method=method.upper())
-        if method.upper() in ("POST", "PUT"):
-            req = urllib.request.Request(url, data=b"", method=method.upper())
+        data = b"" if method.upper() in ("POST", "PUT") else None
+        req = urllib.request.Request(url, data=data, method=method.upper())
         with urllib.request.urlopen(req, timeout=10) as resp:
             return json.loads(resp.read())
     except Exception as e:
-        logger.error(f"Trello API error: {e}")
+        # Sanitize error to avoid leaking credentials from URL
+        logger.error(f"Trello API error on {endpoint}: {type(e).__name__}")
         return {}
 
 
 def _trello_get_list_id(list_name: str) -> str:
     lists = _trello_api("GET", f"boards/{TRELLO_BOARD_ID}/lists")
     if isinstance(lists, list):
-        for l in lists:
-            if l["name"] == list_name:
-                return l["id"]
+        for trello_list in lists:
+            if trello_list["name"] == list_name:
+                return trello_list["id"]
     return ""
 
 
 def _trello_get_label_id(label_name: str) -> str:
     labels = _trello_api("GET", f"boards/{TRELLO_BOARD_ID}/labels")
     if isinstance(labels, list):
-        for l in labels:
-            if l.get("name") == label_name:
-                return l["id"]
+        for label in labels:
+            if label.get("name") == label_name:
+                return label["id"]
     return ""
 
 
@@ -334,23 +325,29 @@ def _parse_response(raw: str) -> dict:
     elif "```" in json_str:
         json_str = json_str.split("```")[1].split("```")[0].strip()
 
+    # Try parsing directly first
+    try:
+        result = json.loads(json_str)
+        if isinstance(result, dict) and "action" in result and "message" in result:
+            return result
+    except json.JSONDecodeError:
+        pass
+
+    # Find JSON object by trying progressively smaller substrings
     start = json_str.find("{")
     if start >= 0:
-        # Find matching closing brace (handle nested braces)
-        depth = 0
-        for i in range(start, len(json_str)):
-            if json_str[i] == "{":
-                depth += 1
-            elif json_str[i] == "}":
-                depth -= 1
-                if depth == 0:
-                    json_str = json_str[start:i + 1]
-                    break
+        for end in range(len(json_str), start, -1):
+            if json_str[end - 1] != "}":
+                continue
+            try:
+                result = json.loads(json_str[start:end])
+                if isinstance(result, dict) and "action" in result and "message" in result:
+                    return result
+            except json.JSONDecodeError:
+                continue
 
-    result = json.loads(json_str)
-    if "action" not in result or "message" not in result:
-        return {"action": "reply", "message": raw[:4000]}
-    return result
+    # Fallback: return raw text as reply
+    return {"action": "reply", "message": raw[:4000]}
 
 
 # ── Task Creation ────────────────────────────────────────────────────────────
@@ -366,7 +363,6 @@ def create_task(title: str, description: str, agent: str = "PM", source: str = "
     target_dir.mkdir(parents=True, exist_ok=True)
 
     now = datetime.now(timezone.utc)
-    timestamp = now.strftime("%Y%m%d-%H%M%S")
     timestamp_us = now.strftime("%Y%m%d-%H%M%S-%f")
     filename = f"{timestamp_us}-task.md"
     filepath = target_dir / filename
@@ -469,6 +465,70 @@ def _detect_model(message: str) -> str:
     return "haiku"
 
 
+def _call_claude(message: str, system_prompt: str, model: str, max_turns: str) -> str:
+    """Shared Claude CLI invocation. Returns raw stdout text."""
+    env = os.environ.copy()
+    env.pop("CLAUDECODE", None)
+
+    proc = subprocess.run(
+        ["claude", "-p", "--", message,
+         "--model", model,
+         "--max-turns", max_turns,
+         "--output-format", "text",
+         "--system-prompt", system_prompt],
+        capture_output=True, text=True, timeout=60,
+        env=env, cwd=str(REPO_ROOT),
+    )
+    return proc.stdout.strip()
+
+
+async def _call_claude_async(message: str, system_prompt: str, model: str, max_turns: str) -> str:
+    """Shared async Claude CLI invocation. Returns raw stdout text."""
+    env = os.environ.copy()
+    env.pop("CLAUDECODE", None)
+
+    proc = await asyncio.create_subprocess_exec(
+        "claude", "-p", "--", message,
+        "--model", model,
+        "--max-turns", max_turns,
+        "--output-format", "text",
+        "--system-prompt", system_prompt,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        env=env,
+        cwd=str(REPO_ROOT),
+    )
+    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+    raw = stdout.decode("utf-8").strip()
+    if not raw:
+        logger.warning(f"Claude empty response. stderr: {stderr.decode()[:200]}")
+    return raw
+
+
+def _handle_response(raw: str, message: str, source: str) -> dict:
+    """Parse Claude response, handle task creation, save to history."""
+    if not raw:
+        reply = "I'm having trouble right now. Try again in a moment."
+        save_message("assistant", reply, source)
+        return {"action": "reply", "message": reply}
+
+    result = _parse_response(raw)
+    reply_text = result.get("message", raw[:4000])
+
+    # Handle task creation
+    if result.get("action") == "create_task":
+        title = result.get("task_title", message[:80])
+        desc = result.get("task_description", message)
+        agent = result.get("agent", "PM")
+        trello_id = create_task(title, desc, agent, source)
+        if trello_id:
+            reply_text += "\n\n📋 Added to Trello → Inbox"
+            result["message"] = reply_text
+
+    save_message("assistant", reply_text, source)
+    return result
+
+
 def ask_sync(message: str, source: str = "dashboard") -> dict:
     """Synchronous Claude call — used by Dashboard (subprocess.run)."""
     save_message("user", message, source)
@@ -478,40 +538,8 @@ def ask_sync(message: str, source: str = "dashboard") -> dict:
     logger.info(f"Model routing: '{model}' for message: {message[:80]}")
 
     try:
-        env = os.environ.copy()
-        env.pop("CLAUDECODE", None)
-
-        proc = subprocess.run(
-            ["claude", "-p", message,
-             "--model", model,
-             "--max-turns", max_turns,
-             "--output-format", "text",
-             "--system-prompt", system_prompt],
-            capture_output=True, text=True, timeout=60,
-            env=env, cwd=str(REPO_ROOT),
-        )
-
-        raw = proc.stdout.strip()
-        if not raw:
-            reply = "I'm having trouble right now. Try again in a moment."
-            save_message("assistant", reply, source)
-            return {"action": "reply", "message": reply}
-
-        result = _parse_response(raw)
-        reply_text = result.get("message", raw[:4000])
-
-        # Handle task creation
-        if result.get("action") == "create_task":
-            title = result.get("task_title", message[:80])
-            desc = result.get("task_description", message)
-            agent = result.get("agent", "PM")
-            trello_id = create_task(title, desc, agent, source)
-            if trello_id:
-                reply_text += "\n\n📋 Added to Trello → Inbox"
-                result["message"] = reply_text
-
-        save_message("assistant", reply_text, source)
-        return result
+        raw = _call_claude(message, system_prompt, model, max_turns)
+        return _handle_response(raw, message, source)
 
     except subprocess.TimeoutExpired:
         reply = "I'm taking too long to think. Try a simpler question."
@@ -522,12 +550,12 @@ def ask_sync(message: str, source: str = "dashboard") -> dict:
         save_message("assistant", reply, source)
         return {"action": "reply", "message": reply}
     except json.JSONDecodeError:
-        reply = raw[:4000] if raw else "Something went wrong."
+        reply = "I got a response I couldn't understand. Try again?"
         save_message("assistant", reply, source)
         return {"action": "reply", "message": reply}
     except Exception as e:
-        logger.error(f"NaviCore ask_sync error: {e}")
-        reply = f"Something went wrong on my end. Try again?"
+        logger.error(f"NaviCore ask_sync error: {type(e).__name__}")
+        reply = "Something went wrong on my end. Try again?"
         save_message("assistant", reply, source)
         return {"action": "reply", "message": reply}
 
@@ -541,49 +569,12 @@ async def ask_async(message: str, source: str = "telegram") -> dict:
     logger.info(f"Model routing: '{model}' for message: {message[:80]}")
 
     try:
-        env = os.environ.copy()
-        env.pop("CLAUDECODE", None)
-
-        proc = await asyncio.create_subprocess_exec(
-            "claude", "-p", message,
-            "--model", model,
-            "--max-turns", max_turns,
-            "--output-format", "text",
-            "--system-prompt", system_prompt,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=env,
-            cwd=str(REPO_ROOT),
-        )
-
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
-        raw = stdout.decode("utf-8").strip()
-
-        if not raw:
-            logger.warning(f"Claude empty response. stderr: {stderr.decode()[:200]}")
-            reply = "I'm having trouble processing that. Could you try again?"
-            save_message("assistant", reply, source)
-            return {"action": "reply", "message": reply}
-
-        result = _parse_response(raw)
-        reply_text = result.get("message", raw[:4000])
-
-        # Handle task creation
-        if result.get("action") == "create_task":
-            title = result.get("task_title", message[:80])
-            desc = result.get("task_description", message)
-            agent = result.get("agent", "PM")
-            trello_id = create_task(title, desc, agent, source)
-            if trello_id:
-                reply_text += "\n\n📋 Added to Trello → Inbox"
-                result["message"] = reply_text
-
-        save_message("assistant", reply_text, source)
-        return result
+        raw = await _call_claude_async(message, system_prompt, model, max_turns)
+        return _handle_response(raw, message, source)
 
     except json.JSONDecodeError:
         logger.warning("Claude non-JSON response, using as plain reply")
-        reply = raw[:4000] if raw else "Something went wrong. Try again?"
+        reply = "I got a response I couldn't understand. Try again?"
         save_message("assistant", reply, source)
         return {"action": "reply", "message": reply}
     except asyncio.TimeoutError:
@@ -597,7 +588,7 @@ async def ask_async(message: str, source: str = "telegram") -> dict:
         save_message("assistant", reply, source)
         return {"action": "reply", "message": reply}
     except Exception as e:
-        logger.error(f"NaviCore ask_async error: {e}")
+        logger.error(f"NaviCore ask_async error: {type(e).__name__}")
         reply = "Something went wrong on my end. Try again?"
         save_message("assistant", reply, source)
         return {"action": "reply", "message": reply}
