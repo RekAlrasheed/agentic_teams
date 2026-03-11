@@ -132,17 +132,9 @@ def get_agent_state(agent):
     if not loop_running:
         return "OFFLINE"
 
-    # Check if claude is running as a child process
-    try:
-        result = subprocess.run(
-            ["pgrep", "-f", "claude"],
-            capture_output=True, text=True, timeout=3
-        )
-        claude_running = result.returncode == 0
-    except Exception:
-        claude_running = False
-
-    if claude_running:
+    # Check per-agent lock file (set by agent-loop.sh when claude is active)
+    lock_file = Path(f"/tmp/navaia-{agent_id}-working")
+    if lock_file.exists():
         return "WORKING"
 
     # Loop running but no claude

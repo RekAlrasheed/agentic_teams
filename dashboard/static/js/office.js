@@ -371,10 +371,10 @@ const ZONES = {
     pois: [
       { c: 14, r: 12 },  // vending machine area
       { c: 16, r: 12 },  // counter area
-      { c: 15, r: 11 },  // coffee machine area
-      { c: 16, r: 11 },  // microwave area
-      { c: 17, r: 11 },  // fridge area
-      { c: 14, r: 11 },  // kitchen floor
+      { c: 15, r: 12 },  // near coffee machine
+      { c: 18, r: 12 },  // counter area
+      { c: 15, r: 13 },  // kitchen center
+      { c: 18, r: 13 },  // kitchen floor
     ],
     chats: ['coffee?', 'mmm snacks', 'hungry!', 'need caffeine'],
   },

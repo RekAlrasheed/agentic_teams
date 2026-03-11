@@ -1,0 +1,110 @@
+NAVAIA Q2 2026 BUDGET FORECAST,,,,
+All figures in SAR (Saudi Riyal),,,,
+Prepared: 2026-03-11,,,,
+,,,,
+REVENUE PROJECTIONS,,,,
+Product,"April 2026","May 2026","June 2026","Q2 TOTAL"
+Bilal (AI Voice Agent),"450,000","500,000","550,000","1,500,000"
+Baian (AI Conversation Agent),"300,000","330,000","365,000","995,000"
+Aqariyum (Property Management),"200,000","220,000","242,000","662,000"
+HR Agent & Other Services,"100,000","110,000","121,000","331,000"
+TOTAL PRODUCT REVENUE,"1,050,000","1,160,000","1,278,000","3,488,000"
+,,,
+REVENUE DETAIL - ASSUMPTIONS,,,
+- Bilal: 12 active clients × SAR 37,500/month baseline,,
+- Baian: 10 active clients × SAR 30,000/month baseline,,
+- Aqariyum: 8 active clients × SAR 25,000/month baseline,,
+- Growth rate: 10% month-over-month across all products,,
+,,,
+OPERATING EXPENSES,,,,
+Category,"April 2026","May 2026","June 2026","Q2 TOTAL"
+,,,
+PERSONNEL COSTS,,,
+CTO / Technical Lead,"150,000","150,000","150,000","450,000"
+Senior Engineers (2x),"200,000","200,000","200,000","600,000"
+Customer Success Manager,"80,000","80,000","80,000","240,000"
+Sales & Partnerships,"120,000","120,000","120,000","360,000"
+Operations / HR,"60,000","60,000","60,000","180,000"
+SUBTOTAL PERSONNEL,"610,000","610,000","610,000","1,830,000"
+,,,
+INFRASTRUCTURE & TECHNOLOGY,,,
+Cloud Services (AWS/Azure),"75,000","75,000","75,000","225,000"
+Telephony & VoIP (SIP),"30,000","30,000","30,000","90,000"
+WhatsApp Business API,"25,000","25,000","25,000","75,000"
+Security & Compliance Tools,"15,000","15,000","15,000","45,000"
+Software Licenses & Tools,"20,000","20,000","20,000","60,000"
+SUBTOTAL INFRASTRUCTURE,"165,000","165,000","165,000","495,000"
+,,,
+SALES & MARKETING,,,
+Digital Marketing,"80,000","85,000","90,000","255,000"
+Sales Commissions (8% of new revenue),"30,000","35,000","40,000","105,000"
+Events & Exhibitions,"25,000","25,000","25,000","75,000"
+Content & Communications,"20,000","20,000","20,000","60,000"
+SUBTOTAL SALES & MARKETING,"155,000","165,000","175,000","495,000"
+,,,
+OFFICE & OPERATIONS,,,
+Office Rent (Riyadh),"50,000","50,000","50,000","150,000"
+Utilities & Internet,"8,000","8,000","8,000","24,000"
+Office Supplies & Equipment,"5,000","5,000","5,000","15,000"
+Insurance & Legal,"25,000","25,000","25,000","75,000"
+Coffee & Refreshments,"5,000","5,000","5,000","15,000"
+SUBTOTAL OFFICE & OPERATIONS,"93,000","93,000","93,000","279,000"
+,,,
+PROFESSIONAL SERVICES,,,
+Accounting & Audit,"20,000","20,000","20,000","60,000"
+Legal & Compliance,"15,000","15,000","15,000","45,000"
+Consulting & Advisory,"10,000","10,000","10,000","30,000"
+SUBTOTAL PROFESSIONAL SERVICES,"45,000","45,000","45,000","135,000"
+,,,
+TOTAL OPERATING EXPENSES,"1,068,000","1,078,000","1,088,000","3,234,000"
+,,,
+OPERATING MARGIN / (DEFICIT),"(18,000)","82,000","190,000","254,000"
+OPERATING MARGIN %,-1.71%,7.07%,14.87%,7.28%
+,,,
+TAXES & NON-OPERATING ITEMS,,,
+VAT (15% on revenue),"157,500","174,000","191,700","523,200"
+Corporate Income Tax (20% on profit),"0","16,400","38,000","54,400"
+Contingency Reserve (5% of opex),"53,400","53,900","54,400","161,700"
+TOTAL TAXES & CONTINGENCY,"210,900","244,300","284,100","739,300"
+,,,
+NET CASH POSITION,,,
+Gross Profit (Revenue - COGS),"1,050,000","1,160,000","1,278,000","3,488,000"
+Less: Operating Expenses,"-1,068,000","-1,078,000","-1,088,000","-3,234,000"
+Less: Taxes & Contingency,"-210,900","-244,300","-284,100","-739,300"
+NET MONTHLY CASH FLOW,"-228,900","-162,300","-94,100","-485,300"
+,,,
+CUMULATIVE CASH (Assumes Q1 ending balance),,
+Q1 2026 Assumed Starting Cash,"2,000,000","2,000,000","2,000,000","2,000,000"
+April Ending Balance,"1,771,100","1,771,100","1,771,100","1,771,100"
+May Ending Balance,"1,608,800","1,608,800","1,608,800","1,608,800"
+June Ending Balance,"1,514,700","1,514,700","1,514,700","1,514,700"
+,,,
+KEY FINANCIAL METRICS,,,
+,April,May,June,Q2 Average
+MRR (Monthly Recurring Revenue),"1,050,000","1,160,000","1,278,000","1,162,667"
+Gross Margin %,100%,100%,100%,100%
+Operating Expense Ratio,102%,93%,85%,93%
+Burn Rate (monthly),"228,900","162,300","94,100","161,800"
+Runway (months from Q1 ending),8.7,12.4,16.1,12.4
+,,,
+ASSUMPTIONS & NOTES,,,
+1. Revenue growth: 10% MoM across all products,,,
+2. CAC payback: <6 months (included in commissions),,,
+3. Retention rate: 90% (conservative),,,
+4. VAT: 15% on all service revenue,,,
+5. Corporate tax: 20% on net profit (simplified),,,
+6. No CAPEX in Q2 (infrastructure already in place),,,
+7. Personnel costs are fixed; commissions variable,,,
+8. Contingency: 5% operational buffer for unexpected costs,,,
+9. Assumptions assume Q1 2026 closing cash of ~SAR 2M,,,
+,,,
+RISKS & SENSITIVITIES,,,
+Downside Scenario (20% revenue shortfall),,,
+- Q2 Revenue would be SAR 2,790,400,,
+- Net cash flow would be -SAR 982,700,,
+- Would deplete cash to SAR 1.0M by June,,
+,,,
+Upside Scenario (20% revenue upside),,,
+- Q2 Revenue would be SAR 4,185,600,,
+- Net cash flow would be positive SAR 511,700,,
+- Would demonstrate clear path to profitability,,
