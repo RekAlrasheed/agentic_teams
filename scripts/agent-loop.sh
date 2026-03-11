@@ -186,7 +186,12 @@ Save outputs to workspace/outputs/${AGENT_NAME}/.
 
 When done:
 1. Move the task file to workspace/tasks/done/
-2. Write a brief completion note to workspace/comms/to-founder/
+2. Write a DETAILED completion report to workspace/comms/to-founder/ that includes:
+   - What you did (summary of work)
+   - Key results or answers the Founder needs
+   - Path to output file(s) in workspace/outputs/${AGENT_NAME}/
+   - Any blockers or follow-up needed
+   The Founder reads this on Telegram — make it complete and useful.
 
 If no tasks in your folder — EXIT immediately to save tokens.
 NEVER ask questions in the terminal.

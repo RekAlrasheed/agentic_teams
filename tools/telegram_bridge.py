@@ -378,20 +378,11 @@ class OutputWatcher(FileSystemEventHandler):
 
             msg = f"📄 *New from {agent}:* `{filepath.name}` ({size_kb:.1f}KB)"
 
-            # Preview for text files
+            # Preview for text files — include enough to see the actual results
             if filepath.suffix.lower() in [".md", ".txt", ".csv", ".html", ".json"]:
                 try:
-                    content = filepath.read_text(encoding="utf-8")
-                    preview_lines = []
-                    for line in content.split("\n"):
-                        stripped = line.strip()
-                        if stripped and not stripped.startswith("#") and not stripped.startswith("---"):
-                            preview_lines.append(stripped)
-                            if len(preview_lines) >= 3:
-                                break
-                    if preview_lines:
-                        preview = "\n".join(preview_lines)[:300]
-                        msg += f"\n\n_{preview}_"
+                    content = filepath.read_text(encoding="utf-8")[:2000]
+                    msg += f"\n\n{content}"
                 except Exception:
                     pass
 
@@ -472,6 +463,38 @@ class TaskDoneWatcher(FileSystemEventHandler):
             logger.error(f"Task done notification failed: {e}")
 
 
+# ── Startup Scan ─────────────────────────────────────────────────────────────
+
+def _startup_scan(app, outbox_watcher, output_watcher, done_watcher):
+    """Send notifications for files created in the last 10 min while bridge was down."""
+    import time as _time
+    cutoff = _time.time() - 600  # 10 minutes ago
+
+    # Scan to-founder messages
+    for f in sorted(TO_FOUNDER_DIR.iterdir(), key=lambda x: x.stat().st_mtime):
+        if f.is_file() and f.name.endswith(".md") and f.name != ".gitkeep":
+            if f.stat().st_mtime > cutoff and f.name not in outbox_watcher._sent:
+                outbox_watcher._sent.add(f.name)
+                try:
+                    loop = asyncio.get_event_loop()
+                    asyncio.run_coroutine_threadsafe(outbox_watcher._send(f), loop)
+                except RuntimeError:
+                    pass
+
+    # Scan new outputs
+    for f in sorted(OUTPUTS_DIR.rglob("*"), key=lambda x: x.stat().st_mtime):
+        if f.is_file() and f.name != ".gitkeep":
+            if f.stat().st_mtime > cutoff and str(f) not in output_watcher._notified:
+                output_watcher._notified.add(str(f))
+                try:
+                    loop = asyncio.get_event_loop()
+                    asyncio.run_coroutine_threadsafe(output_watcher._notify(f), loop)
+                except RuntimeError:
+                    pass
+
+    logger.info("Startup scan complete")
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
@@ -492,12 +515,18 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # File watchers
+    outbox_watcher = OutboxWatcher(app)
+    output_watcher = OutputWatcher(app)
+    done_watcher = TaskDoneWatcher(app)
     observer = Observer()
-    observer.schedule(OutboxWatcher(app), str(TO_FOUNDER_DIR), recursive=False)
-    observer.schedule(OutputWatcher(app), str(OUTPUTS_DIR), recursive=True)
-    observer.schedule(TaskDoneWatcher(app), str(DONE_DIR), recursive=False)
+    observer.schedule(outbox_watcher, str(TO_FOUNDER_DIR), recursive=False)
+    observer.schedule(output_watcher, str(OUTPUTS_DIR), recursive=True)
+    observer.schedule(done_watcher, str(DONE_DIR), recursive=False)
     observer.start()
     logger.info("File watchers active")
+
+    # Startup scan: send files created in the last 10 minutes while bridge was down
+    _startup_scan(app, outbox_watcher, output_watcher, done_watcher)
 
     def shutdown(signum, frame):
         logger.info("Shutting down...")
