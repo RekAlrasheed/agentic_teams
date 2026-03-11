@@ -333,9 +333,15 @@ class OutboxWatcher(FileSystemEventHandler):
             content = filepath.read_text(encoding="utf-8")
             if len(content) > TELEGRAM_MAX_LENGTH:
                 content = content[:TELEGRAM_MAX_LENGTH] + "\n\n_(truncated)_"
-            await self.application.bot.send_message(
-                chat_id=FOUNDER_CHAT_ID, text=content
-            )
+            try:
+                await self.application.bot.send_message(
+                    chat_id=FOUNDER_CHAT_ID, text=content, parse_mode="Markdown"
+                )
+            except Exception:
+                # Fallback to plain text if markdown parsing fails
+                await self.application.bot.send_message(
+                    chat_id=FOUNDER_CHAT_ID, text=content
+                )
             logger.info(f"Sent to Founder: {filepath.name}")
         except Exception as e:
             logger.error(f"Failed to send {filepath.name}: {e}")
