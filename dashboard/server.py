@@ -106,6 +106,12 @@ def log_activity(event_type, message, agent=None):
 def get_agent_state(agent):
     agent_id = agent["id"]
     task_dir = REPO_ROOT / agent.get("task_dir", f"workspace/tasks/{agent_id}")
+    extra_dirs = agent.get("extra_dirs", [])
+
+    # Count pending tasks across primary + extra dirs
+    task_count = count_files(task_dir)
+    for ed in extra_dirs:
+        task_count += count_files(REPO_ROOT / ed)
 
     # Check if agent-loop.sh is running for this agent
     try:
@@ -117,30 +123,27 @@ def get_agent_state(agent):
     except Exception:
         loop_running = False
 
-    if not loop_running:
-        # Also check for the main loop.sh for PM
-        if agent_id == "pm":
-            try:
-                result = subprocess.run(
-                    ["pgrep", "-f", "loop.sh"],
-                    capture_output=True, text=True, timeout=3
-                )
-                loop_running = result.returncode == 0 and result.stdout.strip()
-            except Exception:
-                pass
-
-    if not loop_running:
-        return "OFFLINE"
+    if not loop_running and agent_id == "pm":
+        try:
+            result = subprocess.run(
+                ["pgrep", "-f", "loop.sh"],
+                capture_output=True, text=True, timeout=3
+            )
+            loop_running = result.returncode == 0 and result.stdout.strip()
+        except Exception:
+            pass
 
     # Check per-agent lock file (set by agent-loop.sh when claude is active)
     lock_file = Path(f"/tmp/navaia-{agent_id}-working")
     if lock_file.exists():
         return "WORKING"
 
-    # Loop running but no claude
-    task_count = count_files(task_dir)
+    # Tasks queued → agent should appear active even if loop isn't running
     if task_count > 0:
-        return "STARTING"
+        return "WORKING" if loop_running else "STARTING"
+
+    if not loop_running:
+        return "OFFLINE"
 
     return "IDLE"
 
