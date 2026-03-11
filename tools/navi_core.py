@@ -426,11 +426,56 @@ def _detect_max_turns(message: str) -> str:
     return "3"
 
 
+def _detect_model(message: str) -> str:
+    """Analyze task complexity and return the cheapest model that can handle it.
+
+    Model escalation:
+      haiku  — greetings, status checks, simple Q&A, formatting
+      sonnet — content writing, routine code, research, task routing
+      opus   — architecture decisions, multi-step reasoning, security-critical code
+    """
+    msg_lower = message.lower()
+
+    # Opus triggers — complex reasoning, architecture, security-critical
+    opus_keywords = [
+        "architect", "redesign", "refactor the entire", "security audit",
+        "design the system", "migration strategy", "database schema design",
+        "evaluate trade-offs", "compare approaches", "complex bug",
+        "production outage", "critical vulnerability", "system design",
+        "scalability plan", "infrastructure overhaul",
+    ]
+    for kw in opus_keywords:
+        if kw in msg_lower:
+            return "opus"
+
+    # Sonnet triggers — real work that needs quality output
+    sonnet_keywords = [
+        "write ", "create ", "build ", "implement", "fix ", "debug",
+        "deploy", "code ", "refactor", "update ", "add feature",
+        "blog", "article", "pitch", "proposal", "research",
+        "analyze", "review", "campaign", "email", "content",
+        "api", "endpoint", "test", "budget", "invoice",
+        "translate", "plan ", "strategy",
+    ]
+    for kw in sonnet_keywords:
+        if kw in msg_lower:
+            return "sonnet"
+
+    # Long messages likely need more reasoning
+    if len(message) > 500:
+        return "sonnet"
+
+    # Default: haiku for simple chat, status, Q&A
+    return "haiku"
+
+
 def ask_sync(message: str, source: str = "dashboard") -> dict:
     """Synchronous Claude call — used by Dashboard (subprocess.run)."""
     save_message("user", message, source)
     system_prompt = _build_system_prompt()
     max_turns = _detect_max_turns(message)
+    model = _detect_model(message)
+    logger.info(f"Model routing: '{model}' for message: {message[:80]}")
 
     try:
         env = os.environ.copy()
@@ -438,7 +483,7 @@ def ask_sync(message: str, source: str = "dashboard") -> dict:
 
         proc = subprocess.run(
             ["claude", "-p", message,
-             "--model", "haiku",
+             "--model", model,
              "--max-turns", max_turns,
              "--output-format", "text",
              "--system-prompt", system_prompt],
@@ -492,6 +537,8 @@ async def ask_async(message: str, source: str = "telegram") -> dict:
     save_message("user", message, source)
     system_prompt = _build_system_prompt()
     max_turns = _detect_max_turns(message)
+    model = _detect_model(message)
+    logger.info(f"Model routing: '{model}' for message: {message[:80]}")
 
     try:
         env = os.environ.copy()
@@ -499,7 +546,7 @@ async def ask_async(message: str, source: str = "telegram") -> dict:
 
         proc = await asyncio.create_subprocess_exec(
             "claude", "-p", message,
-            "--model", "haiku",
+            "--model", model,
             "--max-turns", max_turns,
             "--output-format", "text",
             "--system-prompt", system_prompt,

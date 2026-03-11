@@ -102,6 +102,7 @@ fi
 cleanup() {
     echo ""
     echo "[$DISPLAY_NAME] Shutting down..."
+    rm -f "/tmp/navaia-${AGENT_NAME}-working"
     if [ -n "$BRIDGE_PID" ] && kill -0 "$BRIDGE_PID" 2>/dev/null; then
         kill "$BRIDGE_PID" 2>/dev/null || true
         wait "$BRIDGE_PID" 2>/dev/null || true
@@ -194,13 +195,59 @@ PROMPT
     fi
 }
 
+# ── Model Escalation ─────────────────────────────────────────────────────────
+
+detect_model() {
+    # Read all task files and analyze complexity to pick the right model
+    local base_model="$MODEL"
+    local task_content=""
+
+    # Gather all task content
+    while IFS= read -r f; do
+        task_content+="$(cat "$f") "
+    done < <(find "$TASK_DIR" -maxdepth 1 -type f ! -name '.gitkeep' 2>/dev/null)
+
+    local lower_content
+    lower_content=$(echo "$task_content" | tr '[:upper:]' '[:lower:]')
+
+    # Opus triggers — complex architecture, security-critical, system design
+    for kw in "architect" "redesign" "refactor the entire" "security audit" \
+              "design the system" "migration strategy" "database schema" \
+              "production outage" "critical vulnerability" "system design" \
+              "infrastructure overhaul" "scalability"; do
+        if echo "$lower_content" | grep -q "$kw"; then
+            echo "opus"
+            return
+        fi
+    done
+
+    # Sonnet triggers — real work requiring quality output
+    for kw in "write " "create " "build " "implement" "fix " "debug" \
+              "deploy" "refactor" "add feature" "blog" "article" "pitch" \
+              "proposal" "research" "analyze" "review" "campaign" "content" \
+              "api" "endpoint" "test" "budget" "invoice" "strategy"; do
+        if echo "$lower_content" | grep -q "$kw"; then
+            echo "sonnet"
+            return
+        fi
+    done
+
+    # Long tasks likely need more reasoning
+    if [ ${#task_content} -gt 500 ]; then
+        echo "sonnet"
+        return
+    fi
+
+    echo "$base_model"
+}
+
 # ── Main Loop ────────────────────────────────────────────────────────────────
 
 echo ""
 echo "═══════════════════════════════════════════════════════"
 echo "  $DISPLAY_NAME — Agent Loop"
 echo "  Task folder: $TASK_DIR"
-echo "  Model: $MODEL"
+echo "  Default model: $MODEL (auto-escalates for complex tasks)"
 echo "═══════════════════════════════════════════════════════"
 echo ""
 
@@ -223,12 +270,17 @@ while [ "$SESSION_COUNTER" -lt "$MAX_RESTARTS" ]; do
 
     SESSION_COUNTER=$((SESSION_COUNTER + 1))
     TASK_COUNT=$(count_tasks "$TASK_DIR")
-    echo "[$DISPLAY_NAME] Session #${SESSION_COUNTER} — ${TASK_COUNT} task(s) found"
+
+    # Auto-detect model based on task complexity
+    SESSION_MODEL=$(detect_model)
+    echo "[$DISPLAY_NAME] Session #${SESSION_COUNTER} — ${TASK_COUNT} task(s) found — Model: $SESSION_MODEL"
 
     PROMPT=$(build_prompt)
 
-    # Launch Claude in interactive mode (TTY required for Pixel Agents to detect it)
-    claude --dangerously-skip-permissions --model "$MODEL" --max-turns 15 "$PROMPT" || true
+    # Launch Claude — lock file signals "WORKING" to the dashboard
+    touch "/tmp/navaia-${AGENT_NAME}-working"
+    claude --dangerously-skip-permissions --model "$SESSION_MODEL" --max-turns 15 "$PROMPT" || true
+    rm -f "/tmp/navaia-${AGENT_NAME}-working"
 
     echo "[$DISPLAY_NAME] Session #${SESSION_COUNTER} done. Next check in 15s..."
     sleep 15

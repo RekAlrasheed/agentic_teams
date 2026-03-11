@@ -145,8 +145,8 @@ You are running in autonomous mode. NEVER ask questions in the terminal.
 Resume operations now."
     fi
 
-    # Launch Claude Code
-    claude --dangerously-skip-permissions -p "$PROMPT" || true
+    # Launch Claude Code (PM uses sonnet by default — agents escalate per-task)
+    claude --dangerously-skip-permissions --model sonnet -p "$PROMPT" || true
 
     # ── Post-session ─────────────────────────────────────────────────────────
 
