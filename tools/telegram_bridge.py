@@ -313,6 +313,7 @@ class OutboxWatcher(FileSystemEventHandler):
     def __init__(self, application: Application):
         self.application = application
         self._sent: set[str] = set()
+        self._loop = None
 
     def on_created(self, event):
         if event.is_directory or not event.src_path.endswith(".md"):
@@ -321,11 +322,8 @@ class OutboxWatcher(FileSystemEventHandler):
         if filepath.name in self._sent:
             return
         self._sent.add(filepath.name)
-        try:
-            loop = asyncio.get_event_loop()
-            asyncio.run_coroutine_threadsafe(self._send(filepath), loop)
-        except RuntimeError:
-            pass
+        if self._loop:
+            asyncio.run_coroutine_threadsafe(self._send(filepath), self._loop)
 
     async def _send(self, filepath: Path):
         try:
@@ -353,6 +351,7 @@ class OutputWatcher(FileSystemEventHandler):
     def __init__(self, application: Application):
         self.application = application
         self._notified: set[str] = set()
+        self._loop = None
 
     def on_created(self, event):
         if event.is_directory:
@@ -361,11 +360,8 @@ class OutputWatcher(FileSystemEventHandler):
         if filepath.name == ".gitkeep" or str(filepath) in self._notified:
             return
         self._notified.add(str(filepath))
-        try:
-            loop = asyncio.get_event_loop()
-            asyncio.run_coroutine_threadsafe(self._notify(filepath), loop)
-        except RuntimeError:
-            pass
+        if self._loop:
+            asyncio.run_coroutine_threadsafe(self._notify(filepath), self._loop)
 
     async def _notify(self, filepath: Path):
         try:
@@ -405,6 +401,7 @@ class TaskDoneWatcher(FileSystemEventHandler):
     def __init__(self, application: Application):
         self.application = application
         self._notified: set[str] = set()
+        self._loop = None
 
     def on_created(self, event):
         if event.is_directory:
@@ -413,11 +410,8 @@ class TaskDoneWatcher(FileSystemEventHandler):
         if filepath.name == ".gitkeep" or filepath.name in self._notified:
             return
         self._notified.add(filepath.name)
-        try:
-            loop = asyncio.get_event_loop()
-            asyncio.run_coroutine_threadsafe(self._notify(filepath), loop)
-        except RuntimeError:
-            pass
+        if self._loop:
+            asyncio.run_coroutine_threadsafe(self._notify(filepath), self._loop)
 
     async def _notify(self, filepath: Path):
         try:
@@ -465,32 +459,21 @@ class TaskDoneWatcher(FileSystemEventHandler):
 
 # ── Startup Scan ─────────────────────────────────────────────────────────────
 
-def _startup_scan(app, outbox_watcher, output_watcher, done_watcher):
+async def _async_startup_scan(app, outbox_watcher, output_watcher, done_watcher):
     """Send notifications for files created in the last 10 min while bridge was down."""
-    import time as _time
-    cutoff = _time.time() - 600  # 10 minutes ago
+    cutoff = time.time() - 600  # 10 minutes ago
 
-    # Scan to-founder messages
     for f in sorted(TO_FOUNDER_DIR.iterdir(), key=lambda x: x.stat().st_mtime):
         if f.is_file() and f.name.endswith(".md") and f.name != ".gitkeep":
             if f.stat().st_mtime > cutoff and f.name not in outbox_watcher._sent:
                 outbox_watcher._sent.add(f.name)
-                try:
-                    loop = asyncio.get_event_loop()
-                    asyncio.run_coroutine_threadsafe(outbox_watcher._send(f), loop)
-                except RuntimeError:
-                    pass
+                await outbox_watcher._send(f)
 
-    # Scan new outputs
     for f in sorted(OUTPUTS_DIR.rglob("*"), key=lambda x: x.stat().st_mtime):
         if f.is_file() and f.name != ".gitkeep":
             if f.stat().st_mtime > cutoff and str(f) not in output_watcher._notified:
                 output_watcher._notified.add(str(f))
-                try:
-                    loop = asyncio.get_event_loop()
-                    asyncio.run_coroutine_threadsafe(output_watcher._notify(f), loop)
-                except RuntimeError:
-                    pass
+                await output_watcher._notify(f)
 
     logger.info("Startup scan complete")
 
@@ -525,8 +508,16 @@ def main():
     observer.start()
     logger.info("File watchers active")
 
-    # Startup scan: send files created in the last 10 minutes while bridge was down
-    _startup_scan(app, outbox_watcher, output_watcher, done_watcher)
+    # Hook into the app's event loop once it starts via post_init
+    async def _on_startup(application):
+        loop = asyncio.get_running_loop()
+        outbox_watcher._loop = loop
+        output_watcher._loop = loop
+        done_watcher._loop = loop
+        logger.info("Watchers connected to event loop")
+        await _async_startup_scan(application, outbox_watcher, output_watcher, done_watcher)
+
+    app.post_init = _on_startup
 
     def shutdown(signum, frame):
         logger.info("Shutting down...")
