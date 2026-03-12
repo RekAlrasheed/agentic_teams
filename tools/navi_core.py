@@ -417,7 +417,7 @@ def _detect_max_turns(message: str) -> str:
 
     Multi-turn tool use is unnecessary for a chatbot and causes timeouts.
     """
-    return "1"
+    return "2"
 
 
 def _detect_model(message: str) -> str:
