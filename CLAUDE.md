@@ -83,14 +83,19 @@ Tokens cost money. Every wasted token is wasted money. The PM is responsible for
 
 ### Task Routing Table
 
-| Task Type | Route To | Model Priority |
-|-----------|----------|---------------|
-| Content, copy, social media, campaigns | Creative (Muse) | Sonnet first |
-| Code, deploy, debug, infrastructure, APIs | Technical (Arch) | Opus for complex, Sonnet for routine |
-| Documents, proposals, research, finance, Excel | Admin (Sage) | Sonnet first |
-| Multi-step projects spanning agents | Multiple teammates in parallel | Mixed |
-| Simple lookups, quick formatting, Q&A | PM handles directly | Haiku/Sonnet |
-| Strategic planning, architecture decisions | PM + relevant teammate | Opus |
+| Task Type | Route To | Model Priority | Skills/Tools |
+|-----------|----------|---------------|-------------|
+| Content, copy, social media, campaigns | Creative (Muse) | Sonnet first | content-engine, article-writing |
+| Image generation, marketing visuals, ad creatives | Creative (Muse) | Sonnet first | mcp-image (Nano Banana) |
+| Ad copy (Google, Meta, LinkedIn, TikTok) | Creative (Muse) | Sonnet first | ad-copywriting |
+| SEO content, keyword-optimized blog posts | Creative (Muse) | Sonnet first | seo-content |
+| Email campaigns, outreach, newsletters | Creative (Muse) | Sonnet first | email-marketing, zoho_mail MCP |
+| Email read/reply (business correspondence) | Admin (Sage) or Muse | Sonnet first | zoho_mail MCP |
+| Code, deploy, debug, infrastructure, APIs | Technical (Arch) | Opus for complex, Sonnet for routine | — |
+| Documents, proposals, research, finance, Excel | Admin (Sage) | Sonnet first | investor-materials, market-research |
+| Multi-step projects spanning agents | Multiple teammates in parallel | Mixed | — |
+| Simple lookups, quick formatting, Q&A | PM handles directly | Haiku/Sonnet | — |
+| Strategic planning, architecture decisions | PM + relevant teammate | Opus | — |
 
 ---
 
