@@ -715,6 +715,23 @@ class CrewHQHandler(SimpleHTTPRequestHandler):
                 self.send_json({"error": str(e)}, 500)
             return
 
+        if path == "/api/tokens":
+            try:
+                from token_tracker import TokenTracker
+                tracker = TokenTracker()
+                qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                days = int(qs.get("days", ["7"])[0])
+                self.send_json({
+                    "summary": tracker.get_summary(days),
+                    "agents": tracker.get_agent_breakdown(days),
+                    "top_consumers": tracker.get_top_consumers(days),
+                    "daily": tracker.get_daily_usage(days),
+                    "tips": tracker.get_optimization_tips(days),
+                })
+            except Exception as e:
+                self.send_json({"error": str(e)}, 500)
+            return
+
         self.send_error(404)
 
     def do_POST(self):

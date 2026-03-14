@@ -307,6 +307,30 @@ async def handle_stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     )
 
 
+async def handle_tokens(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not is_authorized(update.effective_chat.id):
+        await update.message.reply_text("⛔ Unauthorized.")
+        return
+    try:
+        from token_tracker import TokenTracker
+        tracker = TokenTracker()
+        summary = tracker.get_summary(7)
+        agents = tracker.get_agent_breakdown(7)
+        tips = tracker.get_optimization_tips(7)
+
+        msg = f"📊 *Token Usage Report*\n\n```\n{summary}\n```\n\n"
+        msg += f"*Per Agent:*\n```\n{agents}\n```\n\n"
+        if tips:
+            msg += "*Optimization Tips:*\n" + "\n".join(f"• {t}" for t in tips)
+    except Exception as e:
+        msg = f"Token tracking not available: {e}"
+
+    try:
+        await update.message.reply_text(msg, parse_mode="Markdown")
+    except Exception:
+        await update.message.reply_text(msg)
+
+
 async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not is_authorized(update.effective_chat.id):
         await update.message.reply_text("⛔ Unauthorized.")
@@ -322,6 +346,7 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         "🔄 Track what the AI team is working on\n\n"
         "*Commands:*\n"
         "/status — Dashboard\n"
+        "/tokens — Token usage report\n"
         "/board — Trello board\n"
         "/outputs — Recent deliverables\n"
         "/clear — Clear inbox\n"
@@ -539,6 +564,7 @@ def main():
     app.add_handler(CommandHandler("stop", handle_stop))
     app.add_handler(CommandHandler("help", handle_help))
     app.add_handler(CommandHandler("start", handle_help))
+    app.add_handler(CommandHandler("tokens", handle_tokens))
     app.add_handler(CommandHandler("board", handle_board))
     app.add_handler(CommandHandler("outputs", handle_outputs))
     app.add_handler(CommandHandler("clear", handle_clear))
