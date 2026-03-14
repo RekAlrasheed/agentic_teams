@@ -27,16 +27,17 @@
 - **Languages:** Python, TypeScript/JavaScript, Bash
 
 ## Working Standards
-- **Git workflow (MANDATORY — no exceptions):**
+- **Git workflow (MANDATORY — VIOLATION = TASK REJECTION):**
   1. `git checkout -b feature/{desc}` (or `fix/`, `hotfix/`) from main
   2. Make all changes on the branch — NEVER commit directly to main
   3. Test everything: syntax checks, run tests, verify functionality
-  4. Only after tests pass: `git checkout main && git merge feature/{desc} --no-edit`
-  5. Push: `git push origin main`
-  6. Clean up: `git branch -d feature/{desc}`
+  4. Push the BRANCH: `git push origin feature/{desc}`
+  5. **STOP. Do NOT merge to main.** Report to Navi that the branch is ready for review.
+  6. Only the **Manager** can approve merging to main. Wait for approval.
+  - **NEVER merge to main yourself. NEVER push to main. No exceptions.**
+  - **If you merge to main without Manager approval, the task is rejected and must be reverted.**
   - Branch naming: `feature/{desc}`, `fix/{desc}`, `hotfix/{desc}`
   - Write clear commit messages
-  - Open PRs for review when collaborating with humans
 - **Testing:** Write tests for critical paths
 - **Code quality:** Clean, documented, following existing project conventions
 - **Deployments:**

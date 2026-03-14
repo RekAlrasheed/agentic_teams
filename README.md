@@ -45,7 +45,7 @@ bash scripts/loop.sh
 ```
 ┌──────────┐    Telegram    ┌──────────────┐
 │          │ ──────────────→ │   Telegram   │
-│ Founder  │                 │   Bridge     │
+│ Manager  │                 │   Bridge     │
 │ (Mobile) │ ←────────────── │  (Python)    │
 └──────────┘                 └──────┬───────┘
                                     │ filesystem
@@ -68,7 +68,7 @@ bash scripts/loop.sh
               └───────────┘  └───────────┘  └───────────┘
 ```
 
-1. **Founder** sends a task via Telegram
+1. **Manager** sends a task via Telegram
 2. **Telegram Bridge** saves the message as a file in `workspace/tasks/inbox/`
 3. **Navi (PM)** picks up the task, breaks it down, and assigns to the right agent(s)
 4. **Agents** work in parallel, saving outputs to `workspace/outputs/`
@@ -109,7 +109,7 @@ Board: **Navaia Crew**
 | In Progress | Agent actively working |
 | Review | PM reviewing output |
 | Done | Completed and approved |
-| Blocked | Waiting for Founder input |
+| Blocked | Waiting for Manager input |
 | Rejected | Needs rework |
 
 **Labels:** PM (blue), Creative (orange), Technical (purple), Admin (green)

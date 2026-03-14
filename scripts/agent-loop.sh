@@ -166,6 +166,11 @@ To assign work to an agent, write a task file to their folder:
 
 Each agent loop will pick up the task automatically.
 
+TASK DISPATCHING:
+- Write task descriptions naturally — don't over-specify commands or steps. Agents know their tools.
+- If the Manager's task includes "JDI" (Just Do It), pass JDI through to the agent task. This means skip planning, execute immediately.
+- If the Manager's task is complex and does NOT include JDI, the agent will propose a plan before executing.
+
 STARTUP:
 1. Read CLAUDE.md for full instructions
 2. Check workspace/tasks/inbox/ for new tasks
@@ -174,7 +179,7 @@ STARTUP:
 5. If ALL empty — EXIT immediately
 6. For each task: analyze it, decide which agent(s) should handle it
 7. Write agent-specific task files to dispatch work
-8. Send status to Founder via workspace/comms/to-founder/
+8. Send status to Manager via workspace/comms/to-founder/
 
 NEVER ask questions in the terminal. Route questions via workspace/comms/to-founder/.
 Begin now.
@@ -190,17 +195,35 @@ YOUR TASK FOLDER: ${TASK_DIR}/
 Check it for task files. Execute each task according to your skills.
 Save outputs to workspace/outputs/${AGENT_NAME}/.
 
+TASK COMPLEXITY PROTOCOL:
+Before starting any task, assess its complexity:
+
+1. If the task contains "JDI" (Just Do It) → skip planning, execute immediately.
+2. If the task is SIMPLE (clear instructions, under 5 minutes of work) → execute immediately.
+3. If the task is COMPLEX (multi-step, ambiguous, architectural, risky) → DO NOT start working.
+   Instead:
+   a. Write a plan to workspace/comms/to-founder/ explaining:
+      - What you understand the task to be
+      - Your proposed approach (steps)
+      - Estimated scope
+      - Any risks or trade-offs
+   b. Wait for approval in workspace/comms/from-manager/ before proceeding.
+4. If the task is UNCLEAR (missing info, ambiguous requirements) → DO NOT guess.
+   Instead:
+   a. Write your questions to workspace/comms/to-founder/
+   b. Wait for answers in workspace/comms/from-manager/ before proceeding.
+
 When done:
 1. Move the task file to workspace/tasks/done/
 2. Write a DETAILED completion report to workspace/comms/to-founder/ that includes:
    - What you did (summary of work)
-   - Key results or answers the Founder needs
+   - Key results or answers the Manager needs
    - Path to output file(s) in workspace/outputs/${AGENT_NAME}/
    - Any blockers or follow-up needed
-   The Founder reads this on Telegram — make it complete and useful.
+   The Manager reads this on Telegram — make it complete and useful.
 
 If no tasks in your folder — EXIT immediately to save tokens.
-NEVER ask questions in the terminal.
+NEVER ask questions in the terminal. All questions go through workspace/comms/to-founder/.
 Begin now.
 PROMPT
     fi
@@ -224,6 +247,28 @@ detect_model() {
     done < <(find "$TASK_DIR" -maxdepth 1 -type f ! -name '.gitkeep' 2>/dev/null)
 
     echo "$base_model"
+}
+
+detect_max_turns() {
+    # Navi (PM) can specify max turns in the task file as **Max-Turns:** <number>
+    # If specified, use it. Otherwise pick a default based on model.
+    while IFS= read -r f; do
+        local specified
+        specified=$(grep -i '^\*\*Max-Turns:\*\*' "$f" 2>/dev/null | head -1 | sed 's/.*\*\*Max-Turns:\*\*[[:space:]]*//' | tr -d '[:space:]')
+        if [ -n "$specified" ] && [ "$specified" -gt 0 ] 2>/dev/null; then
+            echo "$specified"
+            return
+        fi
+    done < <(find "$TASK_DIR" -maxdepth 1 -type f ! -name '.gitkeep' 2>/dev/null)
+
+    # Smart defaults based on model — complex tasks get more room
+    local model="${1:-sonnet}"
+    case "$model" in
+        opus)   echo "50" ;;
+        sonnet) echo "25" ;;
+        haiku)  echo "15" ;;
+        *)      echo "15" ;;
+    esac
 }
 
 # ── Main Loop ────────────────────────────────────────────────────────────────
@@ -256,9 +301,10 @@ while [ "$SESSION_COUNTER" -lt "$MAX_RESTARTS" ]; do
     SESSION_COUNTER=$((SESSION_COUNTER + 1))
     TASK_COUNT=$(count_tasks "$TASK_DIR")
 
-    # Auto-detect model based on task complexity
+    # Auto-detect model and max turns from task file (set by Navi)
     SESSION_MODEL=$(detect_model)
-    echo "[$DISPLAY_NAME] Session #${SESSION_COUNTER} — ${TASK_COUNT} task(s) found — Model: $SESSION_MODEL"
+    SESSION_MAX_TURNS=$(detect_max_turns "$SESSION_MODEL")
+    echo "[$DISPLAY_NAME] Session #${SESSION_COUNTER} — ${TASK_COUNT} task(s) — Model: $SESSION_MODEL — Max turns: $SESSION_MAX_TURNS"
 
     PROMPT=$(build_prompt)
 
@@ -269,7 +315,7 @@ while [ "$SESSION_COUNTER" -lt "$MAX_RESTARTS" ]; do
     CLAUDE_STDERR=$(mktemp)
     CLAUDE_STDOUT=$(mktemp)
     START_TIME=$(date +%s)
-    claude --dangerously-skip-permissions --model "$SESSION_MODEL" --max-turns 15 "$PROMPT" >"$CLAUDE_STDOUT" 2>"$CLAUDE_STDERR" || CLAUDE_EXIT=$?
+    claude --dangerously-skip-permissions --model "$SESSION_MODEL" --max-turns "$SESSION_MAX_TURNS" "$PROMPT" >"$CLAUDE_STDOUT" 2>"$CLAUDE_STDERR" || CLAUDE_EXIT=$?
     END_TIME=$(date +%s)
     DURATION_MS=$(( (END_TIME - START_TIME) * 1000 ))
     rm -f "/tmp/navaia-${AGENT_NAME}-working"
@@ -311,7 +357,7 @@ except Exception:
             BACKOFF_DELAY=300
         fi
         echo "[$DISPLAY_NAME] Rate limited (attempt $CONSECUTIVE_FAILURES). Backing off ${BACKOFF_DELAY}s..."
-        # Notify Founder if repeated
+        # Notify Manager if repeated
         if [ "$CONSECUTIVE_FAILURES" -ge 3 ]; then
             mkdir -p workspace/comms/to-founder
             cat > "workspace/comms/to-founder/$(date '+%Y%m%d-%H%M%S')-rate-limit.md" <<RATELIMIT
@@ -345,7 +391,7 @@ RATELIMIT
                 mv "$task_file" "$failed_file"
                 echo "[$DISPLAY_NAME] Moved to dead letter: $base_name"
             done < <(find "$TASK_DIR" -maxdepth 1 -type f ! -name '.gitkeep' 2>/dev/null)
-            # Notify Founder
+            # Notify Manager
             mkdir -p workspace/comms/to-founder
             cat > "workspace/comms/to-founder/$(date '+%Y%m%d-%H%M%S')-task-failed.md" <<TASKFAIL
 ## TASK FAILURE

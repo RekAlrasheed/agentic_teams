@@ -868,6 +868,221 @@ nav {
     letter-spacing: 1px;
 }
 
+/* ── Agent Detail Panel ────────────────────────────── */
+.detail-panel {
+    border-color: var(--accent);
+}
+
+.detail-tabs {
+    display: flex;
+    border-bottom: 2px solid var(--border);
+    background: var(--bg-card);
+}
+
+.detail-tab {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 9px;
+    color: var(--text-dim);
+    background: none;
+    border: none;
+    padding: 10px 18px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+}
+
+.detail-tab:hover {
+    color: var(--text);
+    background: var(--bg-panel);
+}
+
+.detail-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    background: var(--bg-panel);
+}
+
+.detail-section {
+    margin-bottom: 14px;
+}
+
+.detail-label {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 8px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+}
+
+.detail-value {
+    font-size: 17px;
+    color: var(--text);
+}
+
+.detail-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.detail-preview {
+    background: var(--bg-dark);
+    border: 2px solid var(--border);
+    padding: 12px;
+    font-size: 15px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    max-height: 200px;
+    overflow-y: auto;
+    color: var(--text-dim);
+}
+
+.detail-empty {
+    color: var(--text-dim);
+    font-size: 16px;
+    padding: 12px 0;
+    text-align: center;
+}
+
+/* ── Detail: Task List ───────────────────────────── */
+.detail-task-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.detail-task-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+}
+
+.detail-task-item:hover {
+    background: var(--bg-card);
+}
+
+.detail-task-order {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.detail-move-btn {
+    font-size: 12px;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    padding: 0 4px;
+    width: 20px;
+    height: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.detail-move-btn:hover {
+    color: var(--accent);
+}
+
+.detail-task-info {
+    flex: 1;
+    cursor: pointer;
+    min-width: 0;
+}
+
+.detail-task-title {
+    font-size: 17px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.detail-task-meta {
+    font-size: 14px;
+    color: var(--text-dim);
+}
+
+/* ── Detail: Output List ─────────────────────────── */
+.detail-output-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.detail-output-item {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.detail-output-item:hover {
+    background: var(--bg-card);
+}
+
+.detail-output-card {
+    background: var(--bg-card);
+    border: 2px solid var(--border);
+    padding: 12px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+}
+
+.detail-output-card:hover {
+    border-color: var(--accent);
+}
+
+.detail-output-name {
+    font-size: 16px;
+    color: var(--text);
+    margin-bottom: 4px;
+}
+
+.detail-output-meta {
+    font-size: 14px;
+    color: var(--text-dim);
+}
+
+.detail-output-time {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+}
+
+/* ── Detail: Chat ────────────────────────────────── */
+.detail-chat-container {
+    display: flex;
+    flex-direction: column;
+    max-height: 500px;
+}
+
+.detail-chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 380px;
+}
+
+.detail-chat-messages::-webkit-scrollbar {
+    width: 6px;
+}
+
+.detail-chat-messages::-webkit-scrollbar-thumb {
+    background: var(--border);
+}
+
+.detail-chat-container .chat-input-bar {
+    border-top: 2px solid var(--border);
+    padding: 10px 12px;
+}
+
 /* ── Loading ───────────────────────────────────────── */
 .loading {
     font-family: 'Press Start 2P', cursive;

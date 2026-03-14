@@ -46,6 +46,7 @@ TO_FOUNDER_DIR = COMMS_DIR / "to-founder"
 FROM_FOUNDER_DIR = COMMS_DIR / "from-founder"
 INTER_AGENT_DIR = COMMS_DIR / "inter-agent"
 CHAT_LOG = DASHBOARD_DIR / "chat_history.jsonl"
+FAILED_DIR = TASKS_DIR / "failed"
 
 # Trello config from env
 TRELLO_KEY = os.getenv("TRELLO_KEY", "")
@@ -441,7 +442,7 @@ def create_task(agent_id, title, description):
     agent_name = agent["name"] if agent else agent_id
     content = f"""## TASK: {title}
 **Time:** {datetime.now(timezone.utc).isoformat()}
-**Source:** Dashboard (Founder)
+**Source:** Dashboard (Manager)
 **Assigned Agent:** {agent_name}
 **Priority:** Standard
 
@@ -485,7 +486,7 @@ AGENT_TEMPLATE = """# {name} ({role}) — Agent Config
 """
 
 ROLE_DESCRIPTIONS = {
-    "PM": "Team lead. Route tasks, coordinate agents, QA outputs, communicate with the Founder.",
+    "PM": "Team lead. Route tasks, coordinate agents, QA outputs, communicate with the Manager.",
     "Creative": "Content, campaigns, outreach, brand, social media, pitch materials.",
     "Technical": "Code, deployments, infrastructure, APIs, GitHub, debugging.",
     "Admin": "Documents, proposals, research, finance tracking, compliance.",
@@ -539,6 +540,304 @@ def delete_agent(agent_id):
     save_agents(agents)
     log_activity("config", f"Agent removed: {agent_id}")
     return True, "Deleted"
+
+
+# ── Per-Agent Task Management ────────────────────────────────────────────────
+
+
+def get_agent_tasks(agent_id):
+    """List pending tasks for an agent."""
+    if agent_id == "pm":
+        task_dir = INBOX_DIR
+    else:
+        task_dir = REPO_ROOT / f"workspace/tasks/{agent_id}"
+    if not task_dir.exists():
+        return []
+
+    tasks = []
+    for f in sorted(task_dir.iterdir(), key=lambda x: x.stat().st_mtime):
+        if f.is_file() and f.name != ".gitkeep":
+            try:
+                content = f.read_text(encoding="utf-8")
+                title = f.name
+                for line in content.split("\n"):
+                    if line.startswith("## TASK:"):
+                        title = line.replace("## TASK:", "").strip()
+                        break
+                stat = f.stat()
+                tasks.append({
+                    "filename": f.name,
+                    "title": title,
+                    "preview": content[:300],
+                    "size_kb": round(stat.st_size / 1024, 1),
+                    "modified": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+                })
+            except Exception:
+                tasks.append({"filename": f.name, "title": f.name, "preview": ""})
+    return tasks
+
+
+def read_agent_task(agent_id, filename):
+    """Read a specific task file content."""
+    if agent_id == "pm":
+        task_dir = INBOX_DIR
+    else:
+        task_dir = REPO_ROOT / f"workspace/tasks/{agent_id}"
+
+    filepath = task_dir / filename
+    if not filepath.exists() or not filepath.is_file():
+        return None
+    try:
+        filepath.resolve().relative_to(task_dir.resolve())
+    except ValueError:
+        return None
+    return filepath.read_text(encoding="utf-8", errors="replace")
+
+
+def cancel_agent_task(agent_id, filename):
+    """Cancel a task by moving it to failed/ with cancellation metadata."""
+    if agent_id == "pm":
+        task_dir = INBOX_DIR
+    else:
+        task_dir = REPO_ROOT / f"workspace/tasks/{agent_id}"
+
+    filepath = task_dir / filename
+    if not filepath.exists() or not filepath.is_file():
+        return False, "Task not found"
+    try:
+        filepath.resolve().relative_to(task_dir.resolve())
+    except ValueError:
+        return False, "Invalid path"
+
+    FAILED_DIR.mkdir(parents=True, exist_ok=True)
+    content = filepath.read_text(encoding="utf-8", errors="replace")
+    content += f"\n\n---\n**Cancelled:** {datetime.now(timezone.utc).isoformat()}\n**Reason:** Cancelled by Manager via Dashboard\n"
+    (FAILED_DIR / filename).write_text(content, encoding="utf-8")
+    filepath.unlink()
+    log_activity("task", f"Task cancelled: {filename}", agent_id)
+    return True, "Task cancelled"
+
+
+def reorder_agent_tasks(agent_id, filenames):
+    """Reorder tasks by updating file modification times."""
+    if agent_id == "pm":
+        task_dir = INBOX_DIR
+    else:
+        task_dir = REPO_ROOT / f"workspace/tasks/{agent_id}"
+    if not task_dir.exists():
+        return False, "Task directory not found"
+
+    base_time = time.time()
+    for i, fname in enumerate(filenames):
+        fpath = task_dir / fname
+        if fpath.exists():
+            try:
+                fpath.resolve().relative_to(task_dir.resolve())
+            except ValueError:
+                continue
+            os.utime(fpath, (base_time + i, base_time + i))
+    return True, "Tasks reordered"
+
+
+def get_agent_outputs(agent_id, limit=10):
+    """List recent output files for an agent."""
+    output_dir = OUTPUTS_DIR / agent_id
+    if not output_dir.exists():
+        return []
+
+    files = sorted(
+        [f for f in output_dir.iterdir() if f.is_file() and f.name != ".gitkeep"],
+        key=lambda f: f.stat().st_mtime, reverse=True
+    )[:limit]
+
+    return [{
+        "filename": f.name,
+        "path": f"{agent_id}/{f.name}",
+        "size_kb": round(f.stat().st_size / 1024, 1),
+        "modified": datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc).isoformat(),
+    } for f in files]
+
+
+def get_agent_detail_status(agent_id):
+    """Get detailed status: current task content, working duration, latest output."""
+    agents = load_agents()
+    agent = next((a for a in agents if a["id"] == agent_id), None)
+    if not agent:
+        return None
+
+    state = get_agent_state(agent)
+    current_task = get_current_task(agent) if state in ("WORKING", "STARTING") else None
+
+    # Full content of current task
+    current_task_content = None
+    if agent_id == "pm":
+        dirs = [INBOX_DIR, ACTIVE_DIR]
+    else:
+        dirs = [REPO_ROOT / f"workspace/tasks/{agent_id}"]
+
+    for d in dirs:
+        if not d.exists():
+            continue
+        files = sorted(
+            [f for f in d.iterdir() if f.is_file() and f.name != ".gitkeep"],
+            key=lambda f: f.stat().st_mtime, reverse=True
+        )
+        if files:
+            try:
+                current_task_content = files[0].read_text(encoding="utf-8")[:2000]
+            except Exception:
+                pass
+            break
+
+    # Working duration from lock file
+    lock_file = Path(f"/tmp/navaia-{agent_id}-working")
+    duration_seconds = None
+    if lock_file.exists():
+        duration_seconds = int(time.time() - lock_file.stat().st_mtime)
+
+    # Latest output preview
+    output_dir = OUTPUTS_DIR / agent_id
+    latest_output = None
+    if output_dir.exists():
+        output_files = sorted(
+            [f for f in output_dir.iterdir() if f.is_file() and f.name != ".gitkeep"],
+            key=lambda f: f.stat().st_mtime, reverse=True
+        )
+        if output_files:
+            try:
+                latest_output = {
+                    "filename": output_files[0].name,
+                    "preview": output_files[0].read_text(encoding="utf-8")[:500],
+                    "modified": datetime.fromtimestamp(
+                        output_files[0].stat().st_mtime, tz=timezone.utc
+                    ).isoformat(),
+                }
+            except Exception:
+                pass
+
+    task_dir = REPO_ROOT / agent.get("task_dir", f"workspace/tasks/{agent_id}")
+    return {
+        **agent,
+        "state": state,
+        "current_task": current_task,
+        "current_task_content": current_task_content,
+        "duration_seconds": duration_seconds,
+        "latest_output": latest_output,
+        "task_count": count_files(task_dir),
+    }
+
+
+# ── Per-Agent Chat ───────────────────────────────────────────────────────────
+
+
+def _agent_chat_log(agent_id):
+    return DASHBOARD_DIR / f"chat_{agent_id}_history.jsonl"
+
+
+def save_agent_message(agent_id, role, text):
+    """Save a chat message for a specific agent."""
+    chat_log = _agent_chat_log(agent_id)
+    msg = {
+        "role": role,
+        "text": text,
+        "time": datetime.now(timezone.utc).isoformat(),
+    }
+    chat_log.parent.mkdir(parents=True, exist_ok=True)
+    with open(chat_log, "a") as f:
+        f.write(json.dumps(msg) + "\n")
+    return msg
+
+
+def load_agent_chat_history(agent_id, limit=50):
+    """Load last N chat messages for a specific agent."""
+    chat_log = _agent_chat_log(agent_id)
+    if not chat_log.exists():
+        return []
+    try:
+        lines = chat_log.read_text(encoding="utf-8").strip().split("\n")
+        messages = []
+        for line in lines[-limit:]:
+            if line.strip():
+                messages.append(json.loads(line))
+        return messages
+    except Exception:
+        return []
+
+
+def agent_chat(agent_id, message):
+    """Chat with a specific agent using their CLAUDE.md as context."""
+    agents = load_agents()
+    agent = next((a for a in agents if a["id"] == agent_id), None)
+    if not agent:
+        return {"error": "Agent not found"}
+
+    save_agent_message(agent_id, "user", message)
+
+    # Load agent's CLAUDE.md for context
+    agent_claude_md = REPO_ROOT / "agents" / agent_id / "CLAUDE.md"
+    agent_context = ""
+    if agent_claude_md.exists():
+        try:
+            agent_context = agent_claude_md.read_text(encoding="utf-8")[:3000]
+        except Exception:
+            pass
+
+    # Build conversation context
+    recent = load_agent_chat_history(agent_id, 5)
+    conv = "\n".join(
+        f"{'Manager' if m['role'] == 'user' else agent['name']}: {m['text'][:150]}"
+        for m in recent
+    ) or "No previous messages."
+
+    system_prompt = (
+        f"You are {agent['name']}, the {agent['role']} agent of Navaia's AI Workforce.\n\n"
+        f"{agent_context}\n\n"
+        "You are chatting directly with the Manager (CEO). Be concise and helpful.\n"
+        'RESPOND WITH JSON: {"message": "your response"}\n\n'
+        f"Recent conversation:\n{conv}"
+    )
+
+    model = agent.get("model", "sonnet")
+
+    try:
+        env = os.environ.copy()
+        env.pop("CLAUDECODE", None)
+        proc = subprocess.run(
+            ["claude", "-p",
+             "--model", model,
+             "--max-turns", "1",
+             "--output-format", "text",
+             "--system-prompt", system_prompt,
+             "--", message],
+            capture_output=True, text=True, timeout=30,
+            env=env, cwd=str(REPO_ROOT),
+        )
+        raw = proc.stdout.strip() or proc.stderr.strip()
+        if not raw:
+            reply = "I'm having trouble responding right now."
+        else:
+            try:
+                json_str = raw
+                if "```json" in json_str:
+                    json_str = json_str.split("```json")[1].split("```")[0].strip()
+                elif "```" in json_str:
+                    parts = json_str.split("```")
+                    if len(parts) >= 3:
+                        json_str = parts[1].strip()
+                result = json.loads(json_str)
+                reply = result.get("message", raw[:2000])
+            except (json.JSONDecodeError, ValueError):
+                reply = raw[:2000]
+    except subprocess.TimeoutExpired:
+        reply = "I'm taking too long. Try again?"
+    except FileNotFoundError:
+        reply = "Claude CLI not available."
+    except Exception:
+        reply = "Something went wrong. Try again?"
+
+    save_agent_message(agent_id, "assistant", reply)
+    log_activity("chat", f"Chat with {agent['name']}: {message[:40]}", agent_id)
+    return {"message": reply}
 
 
 # ── HTTP Handler ─────────────────────────────────────────────────────────────
@@ -732,6 +1031,52 @@ class CrewHQHandler(SimpleHTTPRequestHandler):
                 self.send_json({"error": str(e)}, 500)
             return
 
+        # ── Agent Detail API ─────────────────────────────────
+        if path.startswith("/api/agent/"):
+            rest = path[11:]  # after "/api/agent/"
+            parts = rest.split("/", 1)
+            agent_id = parts[0]
+            subpath = parts[1] if len(parts) > 1 else ""
+
+            if subpath == "tasks":
+                self.send_json(get_agent_tasks(agent_id))
+                return
+
+            if subpath.startswith("task/"):
+                filename = urllib.parse.unquote(subpath[5:])
+                content = read_agent_task(agent_id, filename)
+                if content is not None:
+                    self.send_json({"content": content, "filename": filename})
+                else:
+                    self.send_json({"error": "Task not found"}, 404)
+                return
+
+            if subpath == "outputs":
+                self.send_json(get_agent_outputs(agent_id))
+                return
+
+            if subpath.startswith("output/"):
+                filename = urllib.parse.unquote(subpath[7:])
+                rel_path = f"{agent_id}/{filename}"
+                content = read_output_file(rel_path)
+                if content is not None:
+                    self.send_json({"content": content, "filename": filename})
+                else:
+                    self.send_json({"error": "Output not found"}, 404)
+                return
+
+            if subpath == "chat/history":
+                self.send_json(load_agent_chat_history(agent_id))
+                return
+
+            if subpath == "status":
+                status = get_agent_detail_status(agent_id)
+                if status:
+                    self.send_json(status)
+                else:
+                    self.send_json({"error": "Agent not found"}, 404)
+                return
+
         self.send_error(404)
 
     def do_POST(self):
@@ -777,7 +1122,7 @@ class CrewHQHandler(SimpleHTTPRequestHandler):
             if not message:
                 self.send_json({"error": "Message required"}, 400)
                 return
-            log_activity("chat", f"Founder: {message[:60]}", "pm")
+            log_activity("chat", f"Manager: {message[:60]}", "pm")
             result = navi_ask_sync(message, "dashboard")
             reply_text = result.get("message", "")
             if result.get("action") == "create_task":
@@ -785,6 +1130,34 @@ class CrewHQHandler(SimpleHTTPRequestHandler):
             log_activity("chat", f"Navi: {reply_text[:60]}", "pm")
             self.send_json(result)
             return
+
+        # ── Agent Detail POST API ─────────────────────────────
+        if path.startswith("/api/agent/"):
+            rest = path[11:]
+            parts = rest.split("/", 1)
+            agent_id = parts[0]
+            subpath = parts[1] if len(parts) > 1 else ""
+
+            if subpath == "chat":
+                message = data.get("message", "").strip()
+                if not message:
+                    self.send_json({"error": "Message required"}, 400)
+                    return
+                result = agent_chat(agent_id, message)
+                self.send_json(result)
+                return
+
+            if subpath == "task/reorder":
+                filenames = data.get("filenames", [])
+                if not filenames:
+                    self.send_json({"error": "Filenames required"}, 400)
+                    return
+                ok, msg = reorder_agent_tasks(agent_id, filenames)
+                if ok:
+                    self.send_json({"ok": True})
+                else:
+                    self.send_json({"error": msg}, 400)
+                return
 
         self.send_json({"error": "Not found"}, 404)
 
@@ -798,6 +1171,22 @@ class CrewHQHandler(SimpleHTTPRequestHandler):
             else:
                 self.send_json({"error": msg}, 400)
             return
+
+        # DELETE /api/agent/{id}/task/{filename}
+        if path.startswith("/api/agent/"):
+            rest = path[11:]
+            parts = rest.split("/", 1)
+            agent_id = parts[0]
+            subpath = parts[1] if len(parts) > 1 else ""
+            if subpath.startswith("task/"):
+                filename = urllib.parse.unquote(subpath[5:])
+                ok, msg = cancel_agent_task(agent_id, filename)
+                if ok:
+                    self.send_json({"ok": True})
+                else:
+                    self.send_json({"error": msg}, 404)
+                return
+
         self.send_json({"error": "Not found"}, 404)
 
 

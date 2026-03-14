@@ -72,7 +72,7 @@
             const div = document.createElement('div');
             div.className = `chat-msg ${msg.role}`;
 
-            const sender = msg.role === 'user' ? 'FOUNDER' : 'NAVI';
+            const sender = msg.role === 'user' ? 'MANAGER' : 'NAVI';
             const time = msg.time ? shortTime(msg.time) : '';
             const source = msg.source && msg.source !== 'dashboard'
                 ? ` <span style="opacity:0.5;font-size:11px;">[via ${msg.source}]</span>` : '';

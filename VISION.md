@@ -6,7 +6,7 @@
 
 ## Phase 0 (Current) — Claude Max on Local Machine
 
-The immediate system: 4 AI agents running as a coordinated team on the Founder's machine.
+The immediate system: 4 AI agents running as a coordinated team on the Manager's machine.
 
 ### Architecture
 - **Engine:** Claude Code Agent Teams (experimental)
@@ -23,7 +23,7 @@ The immediate system: 4 AI agents running as a coordinated team on the Founder's
 - All compute runs locally
 
 ### Limitations
-- Tied to Founder's machine (must stay on)
+- Tied to Manager's machine (must stay on)
 - Max subscription rate limits
 - No persistent memory between sessions (ephemeral sessions)
 - Single point of failure
@@ -153,7 +153,7 @@ Full production system with customer-facing products and multi-tenant isolation.
 - [ ] Stress-test rate limit handling
 - [ ] Refine agent prompts based on output quality
 - [ ] Build knowledge base with all company docs
-- [ ] Establish Founder workflow patterns
+- [ ] Establish Manager workflow patterns
 - [ ] Document common tasks and expected outputs
 
 ### Weeks 5-6: Phase 1 Infrastructure

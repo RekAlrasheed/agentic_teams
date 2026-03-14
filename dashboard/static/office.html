@@ -37,23 +37,20 @@
             </div>
         </div>
 
-        <!-- Agent detail panel (appears on click) -->
-        <div id="agent-detail" class="panel" style="display: none;">
-            <div class="panel-header" id="detail-header">AGENT DETAILS</div>
-            <div class="panel-body">
-                <div class="grid-2">
-                    <div>
-                        <div id="detail-info"></div>
-                    </div>
-                    <div>
-                        <form class="pixel-form" onsubmit="assignFromOffice(event)">
-                            <label>ASSIGN TASK</label>
-                            <input class="pixel-input" id="office-task-title" placeholder="Task title...">
-                            <textarea class="pixel-textarea" id="office-task-desc" placeholder="Description..." rows="2"></textarea>
-                            <button type="submit" class="pixel-btn small">ASSIGN</button>
-                        </form>
-                    </div>
-                </div>
+        <!-- Agent Detail Panel (full panel with tabs, shared with Command Center) -->
+        <div id="agent-detail-panel" class="panel detail-panel" style="display: none;">
+            <div class="panel-header" id="detail-panel-header">
+                AGENT DETAILS
+                <button class="pixel-btn small secondary" onclick="AgentDetail.close(); deselectAgent();" style="margin-left:auto;">CLOSE ✕</button>
+            </div>
+            <div class="detail-tabs">
+                <button class="detail-tab active" data-tab="status" onclick="AgentDetail.switchTab('status')">STATUS</button>
+                <button class="detail-tab" data-tab="tasks" onclick="AgentDetail.switchTab('tasks')">TASKS</button>
+                <button class="detail-tab" data-tab="outputs" onclick="AgentDetail.switchTab('outputs')">OUTPUTS</button>
+                <button class="detail-tab" data-tab="chat" onclick="AgentDetail.switchTab('chat')">CHAT</button>
+            </div>
+            <div class="panel-body" id="detail-content">
+                <div class="loading">LOADING...</div>
             </div>
         </div>
     </div>

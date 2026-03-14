@@ -97,6 +97,23 @@
                 </div>
             </div>
         </div>
+
+        <!-- Agent Detail Panel (appears when clicking an agent card) -->
+        <div id="agent-detail-panel" class="panel detail-panel" style="display: none; margin-top: 16px;">
+            <div class="panel-header" id="detail-panel-header">
+                AGENT DETAILS
+                <button class="pixel-btn small secondary" onclick="AgentDetail.close()" style="margin-left:auto;">CLOSE ✕</button>
+            </div>
+            <div class="detail-tabs">
+                <button class="detail-tab active" data-tab="status" onclick="AgentDetail.switchTab('status')">STATUS</button>
+                <button class="detail-tab" data-tab="tasks" onclick="AgentDetail.switchTab('tasks')">TASKS</button>
+                <button class="detail-tab" data-tab="outputs" onclick="AgentDetail.switchTab('outputs')">OUTPUTS</button>
+                <button class="detail-tab" data-tab="chat" onclick="AgentDetail.switchTab('chat')">CHAT</button>
+            </div>
+            <div class="panel-body" id="detail-content">
+                <div class="loading">LOADING...</div>
+            </div>
+        </div>
     </div>
 
     <script src="/static/js/app.js"></script>
@@ -108,7 +125,7 @@
                 return;
             }
             el.innerHTML = agents.map(a => `
-                <div class="agent-card" onclick="showTaskModal('${a.id}')" style="border-left: 4px solid ${a.color}">
+                <div class="agent-card" onclick="AgentDetail.open('${a.id}')" style="border-left: 4px solid ${a.color}">
                     <div class="agent-name" style="color: ${a.color}">${a.name}</div>
                     <div class="agent-role">${a.role}</div>
                     <div class="agent-state ${a.state}">${a.state}</div>
