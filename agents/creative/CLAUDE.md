@@ -67,13 +67,19 @@
   - Use `purpose` parameter (e.g., "Instagram post", "LinkedIn banner") for better results
   - Can edit existing images by providing `inputImagePath`
 
-### Email (Zoho Mail via Composio MCP — when configured)
-- **Tools:** send email, reply to email, read emails, search emails, create drafts
-- **Use for:** marketing email campaigns, newsletter sends, cold outreach, follow-up replies
+### Email (Zoho Mail via tools/zoho_mail.py)
+- **Commands:**
+  - `python tools/zoho_mail.py list` — list inbox emails
+  - `python tools/zoho_mail.py read <message_id>` — read full email
+  - `python tools/zoho_mail.py send --to "x" --subject "x" --body "x"` — send email
+  - `python tools/zoho_mail.py reply <message_id> --body "x"` — reply to email
+  - `python tools/zoho_mail.py search --query "keyword"` — search emails
+  - `python tools/zoho_mail.py draft --to "x" --subject "x" --body "x"` — save draft
 - **Account:** info@navaia.sa
 - **Tips:**
   - Always draft emails to `workspace/outputs/creative/` first for review
   - Use email-marketing skill for copy frameworks
+  - Body supports HTML for rich emails
   - Personalization tags: {{first_name}}, {{company}}, {{role}}
 
 ## Available Skills
@@ -92,4 +98,4 @@
 - Write: `workspace/comms/inter-agent/` (for handoffs)
 - Trello: Update own task cards via `tools/trello_api.sh`
 - MCP: `mcp-image` (image generation)
-- MCP: `zoho_mail-composio` (email — when configured)
+- Tool: `tools/zoho_mail.py` (email — read, send, reply, search)
