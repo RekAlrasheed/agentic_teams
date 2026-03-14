@@ -442,7 +442,7 @@ def create_task(agent_id, title, description):
     agent_name = agent["name"] if agent else agent_id
     content = f"""## TASK: {title}
 **Time:** {datetime.now(timezone.utc).isoformat()}
-**Source:** Dashboard (Founder)
+**Source:** Dashboard (Manager)
 **Assigned Agent:** {agent_name}
 **Priority:** Standard
 
@@ -486,7 +486,7 @@ AGENT_TEMPLATE = """# {name} ({role}) — Agent Config
 """
 
 ROLE_DESCRIPTIONS = {
-    "PM": "Team lead. Route tasks, coordinate agents, QA outputs, communicate with the Founder.",
+    "PM": "Team lead. Route tasks, coordinate agents, QA outputs, communicate with the Manager.",
     "Creative": "Content, campaigns, outreach, brand, social media, pitch materials.",
     "Technical": "Code, deployments, infrastructure, APIs, GitHub, debugging.",
     "Admin": "Documents, proposals, research, finance tracking, compliance.",
@@ -611,7 +611,7 @@ def cancel_agent_task(agent_id, filename):
 
     FAILED_DIR.mkdir(parents=True, exist_ok=True)
     content = filepath.read_text(encoding="utf-8", errors="replace")
-    content += f"\n\n---\n**Cancelled:** {datetime.now(timezone.utc).isoformat()}\n**Reason:** Cancelled by Founder via Dashboard\n"
+    content += f"\n\n---\n**Cancelled:** {datetime.now(timezone.utc).isoformat()}\n**Reason:** Cancelled by Manager via Dashboard\n"
     (FAILED_DIR / filename).write_text(content, encoding="utf-8")
     filepath.unlink()
     log_activity("task", f"Task cancelled: {filename}", agent_id)
@@ -785,14 +785,14 @@ def agent_chat(agent_id, message):
     # Build conversation context
     recent = load_agent_chat_history(agent_id, 5)
     conv = "\n".join(
-        f"{'Founder' if m['role'] == 'user' else agent['name']}: {m['text'][:150]}"
+        f"{'Manager' if m['role'] == 'user' else agent['name']}: {m['text'][:150]}"
         for m in recent
     ) or "No previous messages."
 
     system_prompt = (
         f"You are {agent['name']}, the {agent['role']} agent of Navaia's AI Workforce.\n\n"
         f"{agent_context}\n\n"
-        "You are chatting directly with the Founder (CEO). Be concise and helpful.\n"
+        "You are chatting directly with the Manager (CEO). Be concise and helpful.\n"
         'RESPOND WITH JSON: {"message": "your response"}\n\n'
         f"Recent conversation:\n{conv}"
     )
@@ -1105,7 +1105,7 @@ class CrewHQHandler(SimpleHTTPRequestHandler):
             if not message:
                 self.send_json({"error": "Message required"}, 400)
                 return
-            log_activity("chat", f"Founder: {message[:60]}", "pm")
+            log_activity("chat", f"Manager: {message[:60]}", "pm")
             result = navi_ask_sync(message, "dashboard")
             reply_text = result.get("message", "")
             if result.get("action") == "create_task":

@@ -7,12 +7,12 @@
 ## 1. CORE INFRASTRUCTURE
 
 ### Communication
-- [x] Telegram bot receives and responds to Founder messages
+- [x] Telegram bot receives and responds to Manager messages
 - [x] Dashboard chat processes messages through NaviCore
 - [x] Agents write completion reports to `workspace/comms/to-founder/`
 - [x] OutboxWatcher sends to-founder messages to Telegram
-- [x] OutputWatcher notifies Founder of new deliverables
-- [x] TaskDoneWatcher notifies Founder when tasks complete
+- [x] OutputWatcher notifies Manager of new deliverables
+- [x] TaskDoneWatcher notifies Manager when tasks complete
 - [x] Startup scan catches missed notifications (bridge restart recovery)
 - [x] Arabic + English language support
 - [x] Markdown formatting in Telegram messages (with plain-text fallback)
@@ -62,12 +62,12 @@
 ### Navi (PM Agent)
 - [x] Task decomposition and routing
 - [x] Multi-agent coordination
-- [x] Founder communication (Telegram + Dashboard)
+- [x] Manager communication (Telegram + Dashboard)
 - [x] Status reporting
 - [x] Trello board management
 - [ ] Sprint planning and velocity tracking
 - [ ] Automated daily standup summaries
-- [ ] Escalation decisions (when to involve Founder)
+- [ ] Escalation decisions (when to involve Manager)
 - [ ] Workload balancing across agents
 - [ ] Meeting notes and action item extraction
 
@@ -152,7 +152,7 @@
 ### Security
 - [x] CLI flag injection prevention (`--` separator)
 - [x] Trello credential sanitization in logs
-- [x] Telegram authorization check (Founder-only)
+- [x] Telegram authorization check (Manager-only)
 - [x] Path traversal prevention (output file reading)
 - [x] No hardcoded secrets (env vars only)
 - [ ] API key rotation schedule

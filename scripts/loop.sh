@@ -128,13 +128,13 @@ Each agent loop will pick up the task automatically.
 
 STARTUP SEQUENCE:
 1. Read CLAUDE.md for your full instructions
-2. Check workspace/tasks/inbox/ for new tasks from the Founder
+2. Check workspace/tasks/inbox/ for new tasks from the Manager
 3. Check workspace/tasks/active/ for any in-progress work
 4. Check workspace/comms/from-founder/ for replies
 5. If ALL folders are EMPTY — EXIT IMMEDIATELY to save tokens. Do not idle.
 6. For each task: analyze it, decide which agent(s) should handle it
 7. Write agent-specific task files to dispatch work
-8. Send status to Founder via workspace/comms/to-founder/
+8. Send status to Manager via workspace/comms/to-founder/
 
 NEVER ask questions in the terminal. Route questions via workspace/comms/to-founder/.
 Begin your startup sequence now."
@@ -143,12 +143,12 @@ Begin your startup sequence now."
 This is session #${SESSION_COUNTER}. DISPATCH tasks via files, NOT Agent tool.
 
 RESUME SEQUENCE:
-1. Check workspace/tasks/inbox/ for NEW tasks from the Founder
+1. Check workspace/tasks/inbox/ for NEW tasks from the Manager
 2. Check workspace/tasks/active/ for IN-PROGRESS work
 3. Check workspace/comms/from-founder/ for replies
 4. If ALL are EMPTY — EXIT IMMEDIATELY. No work = no tokens burned.
 5. Dispatch tasks by writing files to workspace/tasks/{creative,technical,admin}/
-6. Send a brief status update to the Founder via workspace/comms/to-founder/
+6. Send a brief status update to the Manager via workspace/comms/to-founder/
 
 NEVER ask questions in the terminal. NEVER use Agent tool to spawn teammates.
 Resume operations now."

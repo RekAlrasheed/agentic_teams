@@ -245,7 +245,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not text:
         return
 
-    logger.info(f"Message from Founder: {text[:80]}...")
+    logger.info(f"Message from Manager: {text[:80]}...")
 
     # Show typing indicator
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
@@ -398,7 +398,7 @@ async def handle_clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 # ── File Watchers ────────────────────────────────────────────────────────────
 
 class OutboxWatcher(FileSystemEventHandler):
-    """Sends agent messages to Founder via Telegram."""
+    """Sends agent messages to Manager via Telegram."""
 
     def __init__(self, application: Application):
         self.application = application
@@ -421,13 +421,13 @@ class OutboxWatcher(FileSystemEventHandler):
             content = filepath.read_text(encoding="utf-8")
             header = f"💬 *Message from team:*"
             await _smart_send(self.application.bot, filepath, header, content)
-            logger.info(f"Sent to Founder: {filepath.name}")
+            logger.info(f"Sent to Manager: {filepath.name}")
         except Exception as e:
             logger.error(f"Failed to send {filepath.name}: {e}")
 
 
 class OutputWatcher(FileSystemEventHandler):
-    """Notifies Founder when agents produce output files."""
+    """Notifies Manager when agents produce output files."""
 
     def __init__(self, application: Application):
         self.application = application
@@ -470,7 +470,7 @@ class OutputWatcher(FileSystemEventHandler):
 
 
 class TaskDoneWatcher(FileSystemEventHandler):
-    """Notifies Founder when tasks are completed."""
+    """Notifies Manager when tasks are completed."""
 
     def __init__(self, application: Application):
         self.application = application

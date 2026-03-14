@@ -299,7 +299,7 @@ def trello_get_board_summary() -> str:
 
 # ── System Prompt ────────────────────────────────────────────────────────────
 
-SYSTEM_PROMPT_TEMPLATE = """You are Navaia's AI assistant chatting with the Founder (CEO).
+SYSTEM_PROMPT_TEMPLATE = """You are Navaia's AI assistant chatting with the Manager (CEO).
 
 ROLE: Smart assistant managing 4 AI agents (Navi/PM, Muse/Creative, Arch/Technical, Sage/Admin).
 COMPANY: Navaia — AI-powered real estate tech in Riyadh, products Bilal (voice) and Baian (chat).
@@ -309,7 +309,7 @@ RESPOND WITH JSON ONLY. Choose ONE format:
 SINGLE TASK:
 {{"action": "create_task", "message": "Your response", "task_title": "title", "task_description": "description", "agent": "PM|Creative|Technical|Admin"}}
 
-MULTIPLE TASKS (use when Founder wants work for several agents):
+MULTIPLE TASKS (use when Manager wants work for several agents):
 {{"action": "create_tasks", "message": "Your response", "tasks": [{{"title": "task1", "description": "desc1", "agent": "Technical"}}, {{"title": "task2", "description": "desc2", "agent": "Admin"}}]}}
 
 REPLY ONLY (no task):
@@ -321,12 +321,17 @@ AGENT ROUTING — dispatch directly to the right agent:
 - Admin (Sage): docs, proposals, research, finance, compliance, contracts
 - PM: only for coordination tasks that span multiple agents
 
-CRITICAL: When Founder asks to activate agents or assign work, create tasks DIRECTLY for each agent using "create_tasks". Do NOT create a single PM task asking PM to dispatch — route tasks directly to agents.
+CRITICAL: When Manager asks to activate agents or assign work, create tasks DIRECTLY for each agent using "create_tasks". Do NOT create a single PM task asking PM to dispatch — route tasks directly to agents.
+
+TASK COMPLEXITY:
+- If Manager includes "JDI" (Just Do It) in their message, add "JDI" to the task description. This tells the agent to skip planning and execute immediately.
+- For complex or ambiguous requests WITHOUT JDI, the agent will send a plan for approval before executing.
+- For simple tasks, agents execute immediately regardless.
 
 RULES:
 - "reply" for most messages (greetings, questions, chat). "create_task"/"create_tasks" for work requests.
-- Be concise (<200 words). Same language as Founder (English or Arabic).
-- If Founder says "yes"/"go ahead" — check history for what they're confirming.
+- Be concise (<200 words). Same language as Manager (English or Arabic).
+- If Manager says "yes"/"go ahead" — check history for what they're confirming.
 
 {system_status}
 {recent_outputs}
@@ -346,7 +351,7 @@ def _build_system_prompt() -> str:
     if history:
         lines = []
         for m in history:
-            prefix = "Founder" if m["role"] == "user" else "Navi"
+            prefix = "Manager" if m["role"] == "user" else "Navi"
             text = m.get("text", "")[:150]
             lines.append(f"{prefix}: {text}")
         conv_history = "\n".join(lines)
@@ -462,7 +467,7 @@ def create_task(title: str, description: str, agent: str = "PM", source: str = "
 
     content = f"""## TASK: {title}
 **Time:** {now.isoformat()}
-**Source:** {source.capitalize()} (Founder)
+**Source:** {source.capitalize()} (Manager)
 **Assigned Agent:** {agent}
 **Priority:** Standard
 
@@ -749,11 +754,11 @@ _AGENT_PERSONAS: dict[str, tuple[str, str, str]] = {
     "creative": ("Muse", "Creative & Marketing", "content, social media, campaigns, brand, copywriting, outreach, image briefs"),
     "technical": ("Arch", "Technical Lead", "code, debugging, infrastructure, APIs, GitHub, deployments, security"),
     "admin": ("Sage", "Admin & Finance", "documents, proposals, research, finance, compliance, spreadsheets"),
-    "pm": ("Navi", "PM & Team Lead", "task routing, team coordination, Founder communications, project management"),
+    "pm": ("Navi", "PM & Team Lead", "task routing, team coordination, Manager communications, project management"),
 }
 
 _AGENT_CHAT_SYSTEM = """\
-You are {name}, Navaia's {role} AI agent chatting directly with the Founder.
+You are {name}, Navaia's {role} AI agent chatting directly with the Manager.
 Specialty: {description}.
 Company: Navaia — AI-powered real estate tech, Riyadh. Products: Bilal (voice agent) + Baian (chat agent).
 
@@ -766,7 +771,7 @@ Rules:
 - Be concise (max 150 words unless more detail is asked for)
 - Stay in character as {name}, the {role}
 - If asked about work outside your specialty, acknowledge and suggest routing to the right agent
-- Match the Founder's language (English or Arabic)
+- Match the Manager's language (English or Arabic)
 """
 
 
@@ -833,7 +838,7 @@ def _build_agent_system_prompt(agent_id: str) -> str:
     if history:
         lines = []
         for m in history:
-            prefix = "Founder" if m["role"] == "user" else name
+            prefix = "Manager" if m["role"] == "user" else name
             lines.append(f"{prefix}: {m.get('text', '')[:120]}")
         history_text = "\n".join(lines)
     else:

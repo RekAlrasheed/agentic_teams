@@ -6,17 +6,17 @@ You are setting up an AI Workforce Operating System for Navaia, a Saudi Arabia-b
 
 ## WHAT YOU'RE BUILDING
 
-A system where 4 AI agents (PM, Creative, Technical, Admin) run as a coordinated team using Claude Code Agent Teams. The agents work autonomously 24/7 on the Founder's machine using a Claude Max subscription. The Founder controls everything via Telegram and monitors tasks on Trello.
+A system where 4 AI agents (PM, Creative, Technical, Admin) run as a coordinated team using Claude Code Agent Teams. The agents work autonomously 24/7 on the Manager's machine using a Claude Max subscription. The Manager controls everything via Telegram and monitors tasks on Trello.
 
 ### The Agents
 
 1. **PM Agent — "Navi"** (Team Lead, runs on Opus)
-   - Receives tasks from the Founder via Telegram
+   - Receives tasks from the Manager via Telegram
    - Breaks down complex tasks into subtasks
    - Assigns work to the right teammate
    - Reviews all output before marking complete
    - Updates Trello with every status change
-   - Reports back to the Founder on Telegram
+   - Reports back to the Manager on Telegram
    - For simple tasks: handles them directly or routes to a cheaper model (Sonnet/Haiku)
 
 2. **Creative & Marketing Agent — "Muse"** (Teammate, runs on Sonnet)
@@ -92,7 +92,7 @@ navaia/
 │
 ├── workspace/                   ← Active work area (agents read/write here)
 │   ├── tasks/
-│   │   ├── inbox/               ← New tasks from Founder (via Telegram)
+│   │   ├── inbox/               ← New tasks from Manager (via Telegram)
 │   │   ├── active/              ← Currently being worked on
 │   │   ├── done/                ← Completed tasks
 │   │   └── rejected/           ← Rejected tasks
@@ -101,8 +101,8 @@ navaia/
 │   │   ├── technical/
 │   │   └── admin/
 │   └── comms/
-│       ├── to-founder/          ← Messages TO Founder (sent via Telegram)
-│       ├── from-founder/        ← Messages FROM Founder (received via Telegram)
+│       ├── to-founder/          ← Messages TO Manager (sent via Telegram)
+│       ├── from-founder/        ← Messages FROM Manager (received via Telegram)
 │       └── inter-agent/         ← Agent-to-agent file handoffs
 │
 ├── tools/                       ← Integration scripts
@@ -128,18 +128,18 @@ This is the most important file. The PM agent reads this on every startup. Write
 1. **NEVER ask anything in the terminal.** All questions go to Telegram via `workspace/comms/to-founder/` files. The system runs with `--dangerously-skip-permissions` so the terminal is non-interactive.
 
 2. **ALWAYS propose a plan before executing complex tasks.**
-   - When the Founder sends a new task, the PM breaks it down into subtasks
+   - When the Manager sends a new task, the PM breaks it down into subtasks
    - PM writes the plan to `workspace/comms/to-founder/plan-{timestamp}.md`
-   - PM waits for the Founder's approval in `workspace/comms/from-founder/` before proceeding
+   - PM waits for the Manager's approval in `workspace/comms/from-founder/` before proceeding
    - For simple tasks (under 5 minutes of work), just execute immediately
 
 3. **If you can't do something as requested — STOP and ASK.**
    - Do NOT substitute a different approach without permission
    - Do NOT skip steps because they're hard
-   - Do NOT do a "simplified version" unless the Founder explicitly says so
+   - Do NOT do a "simplified version" unless the Manager explicitly says so
    - Write to Telegram: "I can't do X because Y. Options: A, B, or C?"
 
-4. **Update Trello for EVERY task state change.** The Founder monitors Trello. It must always reflect the real status of all work.
+4. **Update Trello for EVERY task state change.** The Manager monitors Trello. It must always reflect the real status of all work.
 
 5. **Agents work in PARALLEL.** When the PM assigns tasks to multiple teammates, they should all work simultaneously. Don't serialize work that can be parallelized.
 
@@ -158,7 +158,7 @@ This is critical — the system runs on a Max subscription with rolling usage li
 
 4. **Be concise in inter-agent messages.** Short status updates, not essays. Save tokens for actual work.
 
-5. **If rate-limited:** The PM should notify the Founder on Telegram ("⏸️ Rate limited. Resuming in ~X minutes."), pause non-urgent work, and prioritize the most important active task when usage resets.
+5. **If rate-limited:** The PM should notify the Manager on Telegram ("⏸️ Rate limited. Resuming in ~X minutes."), pause non-urgent work, and prioritize the most important active task when usage resets.
 
 ### Task Routing Table
 
@@ -184,8 +184,8 @@ Lists (in order):
 - **In Progress** — Agent actively working
 - **Review** — PM reviewing the output
 - **Done** — Completed and approved
-- **Blocked** — Waiting for Founder input
-- **Rejected** — Founder rejected, needs rework
+- **Blocked** — Waiting for Manager input
+- **Rejected** — Manager rejected, needs rework
 
 Labels (one per agent): PM (blue), Creative (orange), Technical (purple), Admin (green)
 
@@ -195,16 +195,16 @@ Agents update cards by calling the Trello API via bash (using helpers in `tools/
 
 ### Telegram Communication Protocol
 
-**Receiving tasks from Founder:**
+**Receiving tasks from Manager:**
 - New tasks appear as files in `workspace/tasks/inbox/` (created by the Telegram bridge)
 - PM checks this folder on startup and periodically
 - Each file contains the task text, timestamp, and source
 
-**Sending messages to Founder:**
+**Sending messages to Manager:**
 - Write a markdown file to `workspace/comms/to-founder/`
 - Filename format: `{YYYYMMDD-HHMMSS}-{topic}.md`
-- The Telegram bridge watches this folder and sends new files to the Founder
-- Keep messages concise — the Founder reads on mobile
+- The Telegram bridge watches this folder and sends new files to the Manager
+- Keep messages concise — the Manager reads on mobile
 
 **Message format:**
 ```markdown
@@ -217,7 +217,7 @@ Agents update cards by calling the Trello API via bash (using helpers in `tools/
 **Trello:** {card ID or link}
 ```
 
-**Receiving Founder replies:**
+**Receiving Manager replies:**
 - Replies appear in `workspace/comms/from-founder/`
 - Check this folder when waiting for approval
 
@@ -255,7 +255,7 @@ All teammates:
 - Read knowledge/INDEX.md to understand what company files are available
 - Check workspace/tasks/ for assigned work
 - Communicate through the shared task list and teammate messaging
-- NEVER ask questions in the terminal — route all Founder questions through the lead
+- NEVER ask questions in the terminal — route all Manager questions through the lead
 - Update Trello via tools/trello_api.sh when you start/finish tasks
 ```
 
@@ -309,7 +309,7 @@ Key details per agent:
 
 ### scripts/setup.sh (First-time setup)
 
-This script runs once when the Founder first clones the repo. It should:
+This script runs once when the Manager first clones the repo. It should:
 
 1. Check prerequisites: Claude Code CLI installed, Python 3.10+, tmux, pip
 2. Install Python dependencies from `tools/requirements.txt`
@@ -330,7 +330,7 @@ This script runs once when the Founder first clones the repo. It should:
    - Read CLAUDE.md
    - Check inbox for pending tasks
    - Spawn teammates
-   - Send status update to Founder on Telegram
+   - Send status update to Manager on Telegram
 6. On exit: kill the Telegram bridge process
 
 ### scripts/loop.sh (24/7 mode)
@@ -358,8 +358,8 @@ Create `tools/telegram_bridge.py` — a Python script that runs alongside Claude
 
 ### How it works:
 
-**Telegram → Filesystem (Founder sends a message):**
-1. Founder sends a message to the Telegram bot
+**Telegram → Filesystem (Manager sends a message):**
+1. Manager sends a message to the Telegram bot
 2. Script saves it as a markdown file in `workspace/tasks/inbox/` (for new tasks) or `workspace/comms/from-founder/` (for replies)
 3. File format:
 ```markdown
@@ -370,13 +370,13 @@ Create `tools/telegram_bridge.py` — a Python script that runs alongside Claude
 {the message text}
 ```
 
-**Filesystem → Telegram (Agent sends a message to Founder):**
+**Filesystem → Telegram (Agent sends a message to Manager):**
 1. Uses `watchdog` library to monitor `workspace/comms/to-founder/` for new files
 2. When a new .md file appears, read its content
-3. Send it to the Founder's Telegram chat
+3. Send it to the Manager's Telegram chat
 4. Truncate if over 4000 chars (Telegram limit) with a note that full message is in the file
 
-### Commands the Founder can use:
+### Commands the Manager can use:
 - Any text message → saved as a new task
 - `/status` → returns count of tasks in each state (inbox, active, done, blocked)
 - `/stop` → creates a STOP signal file that the loop script checks
@@ -494,7 +494,7 @@ Create `tools/catalog.py` — a Python script that scans `knowledge/` and genera
 
 ### When to run:
 - First time during `scripts/setup.sh`
-- Whenever the Founder adds new files to `knowledge/`
+- Whenever the Manager adds new files to `knowledge/`
 - The PM can trigger it by running `python tools/catalog.py`
 
 ---
@@ -567,7 +567,7 @@ Write a clear README with:
    - Run `scripts/setup.sh`
    - Add company files to `knowledge/`
    - Run `scripts/loop.sh` in tmux
-3. **How it works** — simple diagram showing Founder → Telegram → PM → Teammates
+3. **How it works** — simple diagram showing Manager → Telegram → PM → Teammates
 4. **Controlling via Telegram** — what commands work, how to send tasks, how to approve plans
 5. **Monitoring on Trello** — what the board looks like, what each list means
 6. **Repo structure** — quick reference of what's where
@@ -587,7 +587,7 @@ Agent Teams teammates work in parallel by default. When the PM assigns 3 tasks t
 - Status updates to Telegram should be batched — don't send 10 messages for 10 small updates. Batch into one summary every 10-15 minutes during active work.
 
 ### Error Recovery
-- If a teammate crashes or gets stuck, the PM should note the failure on Trello, attempt to re-assign the task, and notify the Founder only if it fails twice.
+- If a teammate crashes or gets stuck, the PM should note the failure on Trello, attempt to re-assign the task, and notify the Manager only if it fails twice.
 - If the Trello API fails (rate limit, bad auth), log the error and continue. Don't block real work because of a tracking tool failure.
 - If the Telegram bridge is down, write messages to `workspace/comms/to-founder/` anyway. They'll be sent when the bridge comes back up.
 
@@ -614,7 +614,7 @@ Example: Creative writes email templates → saves to inter-agent → messages A
 Create VISION.md as a roadmap document containing the full architecture we're eventually building toward. Include:
 
 ### Phase 0 (Current) — Claude Max on Local Machine
-- 4 agents via Agent Teams on Founder's machine
+- 4 agents via Agent Teams on Manager's machine
 - Telegram bridge for communication
 - Trello for task management
 - Max subscription, no extra infrastructure cost
@@ -673,7 +673,7 @@ Once you've created all files:
 1. Initialize the git repo: `git init && git add . && git commit -m "Initial commit: Navaia AI Workforce OS"`
 2. Run `tools/catalog.py` to generate the initial (empty) knowledge index
 3. Run `scripts/setup.sh` to verify everything works
-4. Print a summary of what was created and what the Founder needs to do next:
+4. Print a summary of what was created and what the Manager needs to do next:
    - Fill in .env with actual API keys
    - Add company files to knowledge/
    - Create the Telegram bot via @BotFather
@@ -688,4 +688,4 @@ Do not create placeholder files. Do not write "TODO" comments. Every script shou
 
 Test each script after writing it (where possible without actual API keys). Handle errors gracefully. Log clearly.
 
-The Founder should be able to clone this repo, fill in .env, run setup.sh, and have a working AI workforce within 15 minutes.
+The Manager should be able to clone this repo, fill in .env, run setup.sh, and have a working AI workforce within 15 minutes.

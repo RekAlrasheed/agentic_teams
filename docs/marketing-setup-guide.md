@@ -17,7 +17,7 @@
 
 ---
 
-## Setup Steps (Founder Action Required)
+## Setup Steps (Manager Action Required)
 
 ### Step 1: Get a Gemini API Key (for image generation)
 
