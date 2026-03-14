@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 # Late import to avoid circular dependency
 _task_db = None
+_token_tracker = None
 
 def _get_task_db():
     """Lazy-load TaskDB singleton."""
@@ -36,6 +37,17 @@ def _get_task_db():
         except Exception as e:
             logger.warning(f"TaskDB not available: {e}")
     return _task_db
+
+def _get_token_tracker():
+    """Lazy-load TokenTracker singleton."""
+    global _token_tracker
+    if _token_tracker is None:
+        try:
+            from tools.token_tracker import TokenTracker
+            _token_tracker = TokenTracker()
+        except Exception as e:
+            logger.warning(f"TokenTracker not available: {e}")
+    return _token_tracker
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 
@@ -556,6 +568,8 @@ def _call_claude(message: str, system_prompt: str, model: str, max_turns: str) -
     env = os.environ.copy()
     env.pop("CLAUDECODE", None)
 
+    import time
+    start = time.monotonic()
     proc = subprocess.run(
         ["claude", "-p",
          "--model", model,
@@ -566,9 +580,24 @@ def _call_claude(message: str, system_prompt: str, model: str, max_turns: str) -
         capture_output=True, text=True, timeout=30,
         env=env, cwd=str(REPO_ROOT),
     )
+    duration_ms = int((time.monotonic() - start) * 1000)
     raw = proc.stdout.strip()
     if not raw:
         raw = proc.stderr.strip()
+
+    # Track token usage
+    tracker = _get_token_tracker()
+    if tracker:
+        try:
+            tracker.log_call(
+                agent="navi", model=model,
+                input_text=message, output_text=raw,
+                prompt_text=system_prompt,
+                duration_ms=duration_ms, source="dashboard",
+            )
+        except Exception:
+            pass
+
     return raw
 
 
@@ -577,6 +606,8 @@ async def _call_claude_async(message: str, system_prompt: str, model: str, max_t
     env = os.environ.copy()
     env.pop("CLAUDECODE", None)
 
+    import time
+    start = time.monotonic()
     proc = await asyncio.create_subprocess_exec(
         "claude", "-p",
         "--model", model,
@@ -590,11 +621,26 @@ async def _call_claude_async(message: str, system_prompt: str, model: str, max_t
         cwd=str(REPO_ROOT),
     )
     stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+    duration_ms = int((time.monotonic() - start) * 1000)
     raw = stdout.decode("utf-8").strip()
     if not raw:
         raw = stderr.decode("utf-8").strip()
         if raw:
             logger.info("Claude response came via stderr")
+
+    # Track token usage
+    tracker = _get_token_tracker()
+    if tracker:
+        try:
+            tracker.log_call(
+                agent="navi", model=model,
+                input_text=message, output_text=raw,
+                prompt_text=system_prompt,
+                duration_ms=duration_ms, source="telegram",
+            )
+        except Exception:
+            pass
+
     return raw
 
 

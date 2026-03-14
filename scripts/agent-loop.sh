@@ -209,45 +209,19 @@ PROMPT
 # ── Model Escalation ─────────────────────────────────────────────────────────
 
 detect_model() {
-    # Read all task files and analyze complexity to pick the right model
+    # Navi (PM) specifies the model in the task file as **Model:** <model>
+    # If specified, use it. Otherwise fall back to the agent's default.
     local base_model="$MODEL"
-    local task_content=""
 
-    # Gather all task content
+    # Check task files for a PM-specified model
     while IFS= read -r f; do
-        task_content+="$(cat "$f") "
+        local specified
+        specified=$(grep -i '^\*\*Model:\*\*' "$f" 2>/dev/null | head -1 | sed 's/.*\*\*Model:\*\*[[:space:]]*//' | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+        if [ "$specified" = "opus" ] || [ "$specified" = "sonnet" ] || [ "$specified" = "haiku" ]; then
+            echo "$specified"
+            return
+        fi
     done < <(find "$TASK_DIR" -maxdepth 1 -type f ! -name '.gitkeep' 2>/dev/null)
-
-    local lower_content
-    lower_content=$(echo "$task_content" | tr '[:upper:]' '[:lower:]')
-
-    # Opus triggers — complex architecture, security-critical, system design
-    for kw in "architect" "redesign" "refactor the entire" "security audit" \
-              "design the system" "migration strategy" "database schema" \
-              "production outage" "critical vulnerability" "system design" \
-              "infrastructure overhaul" "scalability"; do
-        if echo "$lower_content" | grep -q "$kw"; then
-            echo "opus"
-            return
-        fi
-    done
-
-    # Sonnet triggers — real work requiring quality output
-    for kw in "write " "create " "build " "implement" "fix " "debug" \
-              "deploy" "refactor" "add feature" "blog" "article" "pitch" \
-              "proposal" "research" "analyze" "review" "campaign" "content" \
-              "api" "endpoint" "test" "budget" "invoice" "strategy"; do
-        if echo "$lower_content" | grep -q "$kw"; then
-            echo "sonnet"
-            return
-        fi
-    done
-
-    # Long tasks likely need more reasoning
-    if [ ${#task_content} -gt 500 ]; then
-        echo "sonnet"
-        return
-    fi
 
     echo "$base_model"
 }
@@ -293,8 +267,34 @@ while [ "$SESSION_COUNTER" -lt "$MAX_RESTARTS" ]; do
 
     CLAUDE_EXIT=0
     CLAUDE_STDERR=$(mktemp)
-    claude --dangerously-skip-permissions --model "$SESSION_MODEL" --max-turns 15 "$PROMPT" 2>"$CLAUDE_STDERR" || CLAUDE_EXIT=$?
+    CLAUDE_STDOUT=$(mktemp)
+    START_TIME=$(date +%s)
+    claude --dangerously-skip-permissions --model "$SESSION_MODEL" --max-turns 15 "$PROMPT" >"$CLAUDE_STDOUT" 2>"$CLAUDE_STDERR" || CLAUDE_EXIT=$?
+    END_TIME=$(date +%s)
+    DURATION_MS=$(( (END_TIME - START_TIME) * 1000 ))
     rm -f "/tmp/navaia-${AGENT_NAME}-working"
+
+    # ── Token tracking ────────────────────────────────────────────────────
+    STDOUT_SIZE=$(wc -c < "$CLAUDE_STDOUT" 2>/dev/null | tr -d ' ')
+    PROMPT_SIZE=${#PROMPT}
+    python3 -c "
+import sys
+sys.path.insert(0, 'tools')
+try:
+    from token_tracker import TokenTracker
+    t = TokenTracker()
+    t.log_call(
+        agent='${AGENT_NAME}', model='${SESSION_MODEL}',
+        input_text='x' * ${PROMPT_SIZE}, output_text='x' * ${STDOUT_SIZE:-0},
+        prompt_text='x' * ${PROMPT_SIZE},
+        duration_ms=${DURATION_MS}, source='agent-loop',
+        task_type='session-${SESSION_COUNTER}',
+    )
+except Exception:
+    pass
+" 2>/dev/null || true
+    cat "$CLAUDE_STDOUT" 2>/dev/null || true
+    rm -f "$CLAUDE_STDOUT"
 
     # ── Rate limit detection and backoff ──────────────────────────────────
     STDERR_CONTENT=""
