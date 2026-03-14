@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 # ──────────────────────────────────────────────────────────────────────────────
-# Navaia AI Workforce — 24/7 Auto-Restart Loop
+# Navaia AI Workforce — 24/7 Auto-Restart Loop (PM only)
 #
-# Runs Claude Code in a loop, automatically restarting when sessions end.
-# Use in tmux for persistent operation:
+# DEPRECATED: Use scripts/start-all.sh or scripts/supervisor.sh instead.
+# Those run ALL agents with auto-restart, health checks, and rate limit backoff.
+#
+# This script only runs the PM agent. If you need all agents:
+#   bash scripts/start-all.sh --supervisor
+#
+# Legacy usage (PM only):
 #   tmux new -s navaia
 #   bash scripts/loop.sh
 #
@@ -37,8 +42,7 @@ set -a
 source .env
 set +a
 
-export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
-# Crew uses 'claude -p' = ephemeral sessions that won't show in --resume
+# File-dispatch mode — agents run in separate terminals, no Agent Teams
 unset CLAUDECODE
 
 # ── Start Telegram Bridge (once) ────────────────────────────────────────────
@@ -108,40 +112,45 @@ while [ "$SESSION_COUNTER" -lt "$MAX_RESTARTS" ]; do
     echo "   Tasks: inbox=$INBOX_COUNT active=$ACTIVE_COUNT replies=$FOUNDER_MSG_COUNT"
     echo "──────────────────────────────────────────────────"
 
-    # Build the resume prompt
+    # Build the resume prompt — uses FILE DISPATCH, not Agent Teams
     if [ "$SESSION_COUNTER" -eq 1 ]; then
         PROMPT="You are Navi, the PM Agent of Navaia's AI Workforce.
 
+IMPORTANT: You are running in MULTI-TERMINAL mode. Each agent runs in its own terminal.
+Do NOT use the Agent tool to spawn teammates. Instead, DISPATCH tasks by writing files:
+
+To assign work to an agent, write a task file to their folder:
+- Creative (Muse): workspace/tasks/creative/{timestamp}-task.md
+- Technical (Arch): workspace/tasks/technical/{timestamp}-task.md
+- Admin (Sage): workspace/tasks/admin/{timestamp}-task.md
+
+Each agent loop will pick up the task automatically.
+
 STARTUP SEQUENCE:
-1. Read CLAUDE.md for your full instructions and team configuration
+1. Read CLAUDE.md for your full instructions
 2. Check workspace/tasks/inbox/ for new tasks from the Founder
 3. Check workspace/tasks/active/ for any in-progress work
-4. If ALL folders are EMPTY (no tasks, no active work, no founder messages) — EXIT IMMEDIATELY to save tokens. Do not idle.
-5. Only if there IS work: spawn teammates using the CHEAPEST model that can handle each task (Haiku > Sonnet > Opus)
-6. Send a status update to the Founder via workspace/comms/to-founder/
+4. Check workspace/comms/from-founder/ for replies
+5. If ALL folders are EMPTY — EXIT IMMEDIATELY to save tokens. Do not idle.
+6. For each task: analyze it, decide which agent(s) should handle it
+7. Write agent-specific task files to dispatch work
+8. Send status to Founder via workspace/comms/to-founder/
 
-COST RULES: Always use the cheapest model possible. Haiku for simple tasks, Sonnet for content/code, Opus ONLY for complex architecture.
-You are running in autonomous mode. NEVER ask questions in the terminal.
-Route all questions to the Founder via Telegram (workspace/comms/to-founder/).
-
+NEVER ask questions in the terminal. Route questions via workspace/comms/to-founder/.
 Begin your startup sequence now."
     else
         PROMPT="You are Navi, the PM Agent of Navaia's AI Workforce.
-
-A previous session ended. This is normal — sessions are ephemeral.
-This is session #${SESSION_COUNTER}.
+This is session #${SESSION_COUNTER}. DISPATCH tasks via files, NOT Agent tool.
 
 RESUME SEQUENCE:
 1. Check workspace/tasks/inbox/ for NEW tasks from the Founder
 2. Check workspace/tasks/active/ for IN-PROGRESS work
 3. Check workspace/comms/from-founder/ for replies
 4. If ALL are EMPTY — EXIT IMMEDIATELY. No work = no tokens burned.
-5. Only if there IS work: spawn teammates using the CHEAPEST model possible
-6. Send a brief status update to the Founder
+5. Dispatch tasks by writing files to workspace/tasks/{creative,technical,admin}/
+6. Send a brief status update to the Founder via workspace/comms/to-founder/
 
-COST RULES: Haiku for simple tasks, Sonnet for content/code, Opus ONLY for complex architecture. Never use Opus when Sonnet will do.
-You are running in autonomous mode. NEVER ask questions in the terminal.
-
+NEVER ask questions in the terminal. NEVER use Agent tool to spawn teammates.
 Resume operations now."
     fi
 

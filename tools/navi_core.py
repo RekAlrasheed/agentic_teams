@@ -13,6 +13,7 @@ import fcntl
 import json
 import logging
 import os
+import re
 import subprocess
 import urllib.parse
 import urllib.request
@@ -21,6 +22,20 @@ from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+# Late import to avoid circular dependency
+_task_db = None
+
+def _get_task_db():
+    """Lazy-load TaskDB singleton."""
+    global _task_db
+    if _task_db is None:
+        try:
+            from tools.task_db import TaskDB
+            _task_db = TaskDB()
+        except Exception as e:
+            logger.warning(f"TaskDB not available: {e}")
+    return _task_db
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 
@@ -34,6 +49,7 @@ INBOX_DIR = TASKS_DIR / "inbox"
 ACTIVE_DIR = TASKS_DIR / "active"
 DONE_DIR = TASKS_DIR / "done"
 BLOCKED_DIR = TASKS_DIR / "blocked"
+FAILED_DIR = TASKS_DIR / "failed"
 FROM_FOUNDER_DIR = WORKSPACE / "comms" / "from-founder"
 TO_FOUNDER_DIR = WORKSPACE / "comms" / "to-founder"
 OUTPUTS_DIR = WORKSPACE / "outputs"
@@ -141,9 +157,23 @@ def get_system_status() -> str:
     active = _count_files(ACTIVE_DIR)
     done = _count_files(DONE_DIR)
     blocked = _count_files(BLOCKED_DIR)
+    failed = _count_files(FAILED_DIR)
 
     status = "Agents: " + ", ".join(agent_states) + "\n"
     status += f"Tasks — Inbox: {inbox}, Active: {active}, Done: {done}, Blocked: {blocked}"
+    if failed > 0:
+        status += f", Failed: {failed}"
+
+    # Add database summary if available
+    db = _get_task_db()
+    if db:
+        try:
+            db_summary = db.get_summary()
+            if "No tasks" not in db_summary:
+                status += f"\n{db_summary}"
+        except Exception:
+            pass
+
     return status
 
 
@@ -321,36 +351,83 @@ def _build_system_prompt() -> str:
 
 # ── Parse Claude response ───────────────────────────────────────────────────
 
+def _validate_response(result: dict) -> bool:
+    """Check that a parsed response has the required fields."""
+    if not isinstance(result, dict):
+        return False
+    if "action" not in result or "message" not in result:
+        return False
+    if result["action"] not in ("reply", "create_task", "create_tasks"):
+        return False
+    if result["action"] == "create_task":
+        if not result.get("task_title") or not result.get("agent"):
+            return False
+    if result["action"] == "create_tasks":
+        tasks = result.get("tasks", [])
+        if not isinstance(tasks, list) or len(tasks) == 0:
+            return False
+    return True
+
+
 def _parse_response(raw: str) -> dict:
-    """Extract JSON from Claude's response, handling markdown wrapping."""
+    """3-layer parser: strict JSON → regex extract → plain text fallback.
+
+    Layer 1: Strip markdown fences, try direct JSON parse + validate.
+    Layer 2: Regex search for JSON objects, validate each match.
+    Layer 3: Treat entire response as plain text reply.
+    """
+    # ── Layer 1: Strip markdown and try direct parse ──────────────────
     json_str = raw
     if "```json" in json_str:
         json_str = json_str.split("```json")[1].split("```")[0].strip()
     elif "```" in json_str:
-        json_str = json_str.split("```")[1].split("```")[0].strip()
+        parts = json_str.split("```")
+        if len(parts) >= 3:
+            json_str = parts[1].strip()
 
-    # Try parsing directly first
     try:
         result = json.loads(json_str)
-        if isinstance(result, dict) and "action" in result and "message" in result:
+        if _validate_response(result):
             return result
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, ValueError):
         pass
 
-    # Find JSON object by trying progressively smaller substrings
-    start = json_str.find("{")
-    if start >= 0:
-        for end in range(len(json_str), start, -1):
-            if json_str[end - 1] != "}":
+    # ── Layer 2: Regex extract JSON objects from mixed text ───────────
+    # Find all top-level JSON objects using brace matching
+    for match in re.finditer(r'\{', raw):
+        start = match.start()
+        depth = 0
+        in_string = False
+        escape_next = False
+        for i in range(start, len(raw)):
+            c = raw[i]
+            if escape_next:
+                escape_next = False
                 continue
-            try:
-                result = json.loads(json_str[start:end])
-                if isinstance(result, dict) and "action" in result and "message" in result:
-                    return result
-            except json.JSONDecodeError:
+            if c == '\\' and in_string:
+                escape_next = True
                 continue
+            if c == '"' and not escape_next:
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if c == '{':
+                depth += 1
+            elif c == '}':
+                depth -= 1
+                if depth == 0:
+                    candidate = raw[start:i + 1]
+                    try:
+                        result = json.loads(candidate)
+                        if _validate_response(result):
+                            return result
+                    except (json.JSONDecodeError, ValueError):
+                        pass
+                    break
 
-    # Fallback: return raw text as reply
+    # ── Layer 3: Plain text fallback ─────────────────────────────────
+    logger.warning(f"JSON parse failed, falling back to plain text. Raw: {raw[:200]}")
     return {"action": "reply", "message": raw[:4000]}
 
 
@@ -382,6 +459,17 @@ def create_task(title: str, description: str, agent: str = "PM", source: str = "
 """
     filepath.write_text(content, encoding="utf-8")
     logger.info(f"Task created: {filepath.name} [{source}]")
+
+    # Record in SQLite database
+    db = _get_task_db()
+    if db:
+        try:
+            db.create_task(
+                title=title, description=description, agent=agent_lower,
+                source=source, task_file=str(filepath),
+            )
+        except Exception as e:
+            logger.warning(f"TaskDB insert failed (non-blocking): {e}")
 
     # Write to from-founder so agents can pick it up
     FROM_FOUNDER_DIR.mkdir(parents=True, exist_ok=True)

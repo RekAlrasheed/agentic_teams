@@ -1,0 +1,40 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/rakanalrasheed/Desktop/NAVAIA/agentic_teams/workspace",
+        "/Users/rakanalrasheed/Desktop/NAVAIA/agentic_teams/knowledge"
+      ]
+    },
+    "brave-search": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-brave-search"],
+      "env": {
+        "BRAVE_API_KEY": "${BRAVE_API_KEY}"
+      },
+      "disabled": true,
+      "_note": "Enable after adding BRAVE_API_KEY to .env (free at https://brave.com/search/api/)"
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      },
+      "_note": "GitHub access for Arch (Technical) agent — manage repos, issues, PRs"
+    },
+    "mcp-image": {
+      "command": "npx",
+      "args": ["-y", "mcp-image"],
+      "env": {
+        "GEMINI_API_KEY": "${GEMINI_API_KEY}",
+        "IMAGE_OUTPUT_DIR": "/Users/rakanalrasheed/Desktop/NAVAIA/agentic_teams/workspace/outputs/images",
+        "IMAGE_QUALITY": "balanced"
+      },
+      "_note": "Image generation for Muse (Creative) agent"
+    }
+  }
+}

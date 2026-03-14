@@ -692,6 +692,29 @@ class CrewHQHandler(SimpleHTTPRequestHandler):
             self.send_json(navi_load_history(50))
             return
 
+        if path == "/api/tasks":
+            try:
+                from task_db import TaskDB
+                db = TaskDB()
+                qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                status = qs.get("status", [None])[0]
+                agent = qs.get("agent", [None])[0]
+                limit = int(qs.get("limit", ["50"])[0])
+                tasks = db.get_tasks(status=status, agent=agent, limit=limit)
+                self.send_json(tasks)
+            except Exception as e:
+                self.send_json({"error": str(e)}, 500)
+            return
+
+        if path == "/api/tasks/stats":
+            try:
+                from task_db import TaskDB
+                db = TaskDB()
+                self.send_json(db.get_agent_stats())
+            except Exception as e:
+                self.send_json({"error": str(e)}, 500)
+            return
+
         self.send_error(404)
 
     def do_POST(self):

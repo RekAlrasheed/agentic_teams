@@ -79,10 +79,14 @@ esac
 mkdir -p "$TASK_DIR"
 
 STOP_FILE="workspace/comms/STOP"
+FAILED_DIR="workspace/tasks/failed"
 MAX_RESTARTS=${MAX_RESTARTS:-200}
+MAX_TASK_RETRIES=3
 SESSION_COUNTER=0
 CONSECUTIVE_FAILURES=0
 BACKOFF_DELAY=0
+
+mkdir -p "$FAILED_DIR"
 
 # ── PM-specific: Start Telegram Bridge ────────────────────────────────────────
 
@@ -320,6 +324,42 @@ while [ "$SESSION_COUNTER" -lt "$MAX_RESTARTS" ]; do
 Will resume automatically after backoff.
 RATELIMIT
         fi
+
+        # ── Dead letter queue: move tasks to failed/ after max retries ──
+        if [ "$CONSECUTIVE_FAILURES" -ge "$MAX_TASK_RETRIES" ]; then
+            echo "[$DISPLAY_NAME] Max retries ($MAX_TASK_RETRIES) reached. Moving tasks to failed/..."
+            while IFS= read -r task_file; do
+                base_name=$(basename "$task_file")
+                failed_file="${FAILED_DIR}/${AGENT_NAME}-${base_name}"
+                # Append error metadata to the task file before moving
+                {
+                    echo ""
+                    echo "---"
+                    echo "## FAILURE LOG"
+                    echo "**Agent:** $DISPLAY_NAME"
+                    echo "**Failed at:** $(date '+%Y-%m-%d %H:%M:%S')"
+                    echo "**Attempts:** $CONSECUTIVE_FAILURES"
+                    echo "**Error:** Rate limited / API overloaded"
+                    echo "**stderr:** ${STDERR_CONTENT:0:500}"
+                } >> "$task_file"
+                mv "$task_file" "$failed_file"
+                echo "[$DISPLAY_NAME] Moved to dead letter: $base_name"
+            done < <(find "$TASK_DIR" -maxdepth 1 -type f ! -name '.gitkeep' 2>/dev/null)
+            # Notify Founder
+            mkdir -p workspace/comms/to-founder
+            cat > "workspace/comms/to-founder/$(date '+%Y%m%d-%H%M%S')-task-failed.md" <<TASKFAIL
+## TASK FAILURE
+
+**Agent:** $DISPLAY_NAME
+**Status:** Tasks moved to dead letter queue after $CONSECUTIVE_FAILURES failed attempts.
+**Reason:** Repeated rate limits / API errors.
+**Location:** workspace/tasks/failed/
+
+To retry: move the task file back to workspace/tasks/${AGENT_NAME}/
+TASKFAIL
+            CONSECUTIVE_FAILURES=0
+        fi
+
         sleep "$BACKOFF_DELAY"
         continue
     elif [ "$CLAUDE_EXIT" -ne 0 ] && [ -n "$STDERR_CONTENT" ]; then
@@ -331,6 +371,27 @@ RATELIMIT
         fi
         echo "[$DISPLAY_NAME] Claude exited with code $CLAUDE_EXIT. Waiting ${BACKOFF_DELAY}s..."
         echo "[$DISPLAY_NAME] stderr: ${STDERR_CONTENT:0:200}"
+
+        # Dead letter queue for non-rate-limit errors too
+        if [ "$CONSECUTIVE_FAILURES" -ge "$MAX_TASK_RETRIES" ]; then
+            echo "[$DISPLAY_NAME] Max retries reached. Moving tasks to failed/..."
+            while IFS= read -r task_file; do
+                base_name=$(basename "$task_file")
+                {
+                    echo ""
+                    echo "---"
+                    echo "## FAILURE LOG"
+                    echo "**Agent:** $DISPLAY_NAME"
+                    echo "**Failed at:** $(date '+%Y-%m-%d %H:%M:%S')"
+                    echo "**Attempts:** $CONSECUTIVE_FAILURES"
+                    echo "**Exit code:** $CLAUDE_EXIT"
+                    echo "**stderr:** ${STDERR_CONTENT:0:500}"
+                } >> "$task_file"
+                mv "$task_file" "${FAILED_DIR}/${AGENT_NAME}-${base_name}"
+            done < <(find "$TASK_DIR" -maxdepth 1 -type f ! -name '.gitkeep' 2>/dev/null)
+            CONSECUTIVE_FAILURES=0
+        fi
+
         sleep "$BACKOFF_DELAY"
         continue
     else

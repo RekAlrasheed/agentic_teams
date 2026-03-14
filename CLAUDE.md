@@ -156,43 +156,32 @@ source tools/trello_api.sh
 
 ---
 
-## TEAM SPAWN INSTRUCTIONS
+## TASK DISPATCH (FILE-BASED)
 
-On startup, spawn teammates with these instructions:
+Each agent runs in its own terminal via `scripts/agent-loop.sh`. To assign work to an agent, write a task file to their folder:
 
+- **Creative (Muse):** `workspace/tasks/creative/{YYYYMMDD-HHMMSS}-{topic}.md`
+- **Technical (Arch):** `workspace/tasks/technical/{YYYYMMDD-HHMMSS}-{topic}.md`
+- **Admin (Sage):** `workspace/tasks/admin/{YYYYMMDD-HHMMSS}-{topic}.md`
+
+Each agent loop picks up new files automatically (30s polling cycle).
+
+**Do NOT use the Agent tool to spawn teammates.** All agents run independently.
+
+### Task File Format
+```markdown
+## TASK: {title}
+**Time:** {ISO timestamp}
+**Source:** {Telegram|Dashboard} (Founder)
+**Assigned Agent:** {agent name}
+**Priority:** Standard
+
+### Description
+{full task description}
 ```
-Create an agent team. You are the lead (Navi, PM Agent).
 
-Spawn 3 teammates:
-
-1. Name: "Muse" (Creative & Marketing)
-   Instructions: Read agents/creative/CLAUDE.md for your full role and skills.
-   You handle all content, marketing, campaigns, pitch materials, and outreach copy.
-   Save outputs to workspace/outputs/creative/.
-   Report progress to the lead.
-   Use Sonnet-tier reasoning — save Opus for complex strategy only.
-
-2. Name: "Arch" (Technical)
-   Instructions: Read agents/technical/CLAUDE.md for your full role and skills.
-   You handle all code, deployments, infrastructure, and API integrations.
-   You have access to GitHub repos and AWS.
-   Save outputs to workspace/outputs/technical/.
-   Report progress to the lead.
-
-3. Name: "Sage" (Admin & Finance)
-   Instructions: Read agents/admin/CLAUDE.md for your full role and skills.
-   You handle documents, proposals, research, finance tracking, and compliance.
-   Save outputs to workspace/outputs/admin/.
-   Report progress to the lead.
-   Use Sonnet-tier reasoning — save Opus for complex analysis only.
-
-All teammates:
-- Read knowledge/INDEX.md to understand what company files are available
-- Check workspace/tasks/ for assigned work
-- Communicate through the shared task list and teammate messaging
-- NEVER ask questions in the terminal — route all Founder questions through the lead
-- Update Trello via tools/trello_api.sh when you start/finish tasks
-```
+### Failed Tasks
+Tasks that fail 3 times are moved to `workspace/tasks/failed/` with error metadata appended. The Founder is notified via Telegram. To retry: move the file back to the agent's task folder.
 
 ---
 
@@ -202,7 +191,7 @@ On every session start:
 1. Read this file (CLAUDE.md)
 2. Check `workspace/tasks/inbox/` for new tasks
 3. Check `workspace/tasks/active/` for in-progress work
-4. Spawn teammates if needed
+4. Dispatch tasks by writing files to agent folders (see TASK DISPATCH section)
 5. Send status update to Founder via Telegram
 6. Begin working on highest-priority tasks
 
@@ -217,7 +206,7 @@ On every session start:
 ## FILE HANDOFFS BETWEEN AGENTS
 
 1. Save file to `workspace/comms/inter-agent/{from}-to-{to}-{topic}.md`
-2. Message the receiving agent via Agent Teams messaging
+2. Write a task file to the receiving agent's folder referencing the handoff file
 3. The receiving agent reads the file and proceeds
 
 ## BATCHING
@@ -250,6 +239,13 @@ planner, architect, tdd-guide, code-reviewer, security-reviewer, build-error-res
 
 ### Installed Skills (20)
 Coding standards, Python patterns/testing, API design, backend patterns, security review/scan, TDD workflow, deployment patterns, Docker patterns, continuous learning, verification loop, agentic engineering, autonomous loops, cost-aware LLM pipeline, content engine, article writing, investor materials, market research
+
+### MCP Servers (External Tool Access)
+Configured in `.mcp.json` — agents can use these tools natively:
+- **filesystem** — scoped read/write access to workspace/ and knowledge/
+- **github** — manage repos, issues, PRs (for Arch)
+- **mcp-image** — AI image generation via Gemini (for Muse)
+- **brave-search** — web search for research (disabled until BRAVE_API_KEY added)
 
 ### How to Use
 - These complement (not replace) your agent behavior rules above
