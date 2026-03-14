@@ -10,6 +10,7 @@ No regex classification — pure AI understanding.
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 import logging
 import os
@@ -83,6 +84,70 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 TELEGRAM_MAX_LENGTH = 4000
+DOCUMENT_THRESHOLD = 4000   # chars — above this, send as file attachment
+LARGE_FILE_KB = 50          # KB — above this, send summary only (no attachment)
+TEXT_EXTENSIONS = {".md", ".txt", ".csv", ".html", ".json", ".log", ".xml", ".yaml", ".yml"}
+
+
+async def _smart_send(bot, filepath: Path, header: str, content: str):
+    """Send content via the best channel based on size.
+
+    - Short  (≤ TELEGRAM_MAX_LENGTH): inline Telegram message
+    - Medium (≤ LARGE_FILE_KB):       Telegram document attachment
+    - Large  (> LARGE_FILE_KB):       summary message + file path
+    """
+    total_len = len(header) + len(content) + 2  # +2 for newlines
+    size_kb = filepath.stat().st_size / 1024
+
+    # ── Short: fits in a message ──────────────────────────────────────────
+    if total_len <= TELEGRAM_MAX_LENGTH:
+        msg = f"{header}\n\n{content}" if content else header
+        try:
+            await bot.send_message(chat_id=FOUNDER_CHAT_ID, text=msg, parse_mode="Markdown")
+        except Exception:
+            await bot.send_message(chat_id=FOUNDER_CHAT_ID, text=msg)
+        return
+
+    # ── Large: too big to attach, send summary only ───────────────────────
+    if size_kb > LARGE_FILE_KB:
+        # Extract first meaningful lines as summary
+        lines = [l for l in content.split("\n") if l.strip()][:8]
+        summary = "\n".join(lines)
+        if len(summary) > 600:
+            summary = summary[:600] + "..."
+        msg = (
+            f"{header}\n\n"
+            f"_{size_kb:.0f}KB — too large for Telegram._\n\n"
+            f"*Preview:*\n{summary}\n\n"
+            f"Full file: `{filepath.name}`\n"
+            f"Path: `{filepath}`"
+        )
+        if len(msg) > TELEGRAM_MAX_LENGTH:
+            msg = msg[:TELEGRAM_MAX_LENGTH - 20] + "\n\n_(truncated)_"
+        try:
+            await bot.send_message(chat_id=FOUNDER_CHAT_ID, text=msg, parse_mode="Markdown")
+        except Exception:
+            await bot.send_message(chat_id=FOUNDER_CHAT_ID, text=msg)
+        return
+
+    # ── Medium: send as document attachment ───────────────────────────────
+    try:
+        file_bytes = filepath.read_bytes()
+        buf = io.BytesIO(file_bytes)
+        buf.name = filepath.name
+        await bot.send_document(
+            chat_id=FOUNDER_CHAT_ID,
+            document=buf,
+            caption=header[:1024],  # Telegram caption limit
+        )
+    except Exception as e:
+        logger.warning(f"send_document failed ({e}), falling back to truncated message")
+        truncated = content[:TELEGRAM_MAX_LENGTH - len(header) - 50]
+        msg = f"{header}\n\n{truncated}\n\n_(truncated)_"
+        try:
+            await bot.send_message(chat_id=FOUNDER_CHAT_ID, text=msg, parse_mode="Markdown")
+        except Exception:
+            await bot.send_message(chat_id=FOUNDER_CHAT_ID, text=msg)
 
 
 # ── Trello API (local helpers for Telegram-specific operations) ──────────────
@@ -329,17 +394,8 @@ class OutboxWatcher(FileSystemEventHandler):
         try:
             await asyncio.sleep(1)
             content = filepath.read_text(encoding="utf-8")
-            if len(content) > TELEGRAM_MAX_LENGTH:
-                content = content[:TELEGRAM_MAX_LENGTH] + "\n\n_(truncated)_"
-            try:
-                await self.application.bot.send_message(
-                    chat_id=FOUNDER_CHAT_ID, text=content, parse_mode="Markdown"
-                )
-            except Exception:
-                # Fallback to plain text if markdown parsing fails
-                await self.application.bot.send_message(
-                    chat_id=FOUNDER_CHAT_ID, text=content
-                )
+            header = f"💬 *Message from team:*"
+            await _smart_send(self.application.bot, filepath, header, content)
             logger.info(f"Sent to Founder: {filepath.name}")
         except Exception as e:
             logger.error(f"Failed to send {filepath.name}: {e}")
@@ -372,24 +428,17 @@ class OutputWatcher(FileSystemEventHandler):
             agent = agent_names.get(agent_folder, agent_folder)
             size_kb = filepath.stat().st_size / 1024
 
-            msg = f"📄 *New from {agent}:* `{filepath.name}` ({size_kb:.1f}KB)"
+            header = f"📄 *New from {agent}:* `{filepath.name}` ({size_kb:.1f}KB)"
 
-            # Preview for text files — include enough to see the actual results
-            if filepath.suffix.lower() in [".md", ".txt", ".csv", ".html", ".json"]:
+            # Read content for text files, empty string for binary
+            content = ""
+            if filepath.suffix.lower() in TEXT_EXTENSIONS:
                 try:
-                    content = filepath.read_text(encoding="utf-8")[:2000]
-                    msg += f"\n\n{content}"
+                    content = filepath.read_text(encoding="utf-8")
                 except Exception:
                     pass
 
-            try:
-                await self.application.bot.send_message(
-                    chat_id=FOUNDER_CHAT_ID, text=msg, parse_mode="Markdown"
-                )
-            except Exception:
-                await self.application.bot.send_message(
-                    chat_id=FOUNDER_CHAT_ID, text=msg
-                )
+            await _smart_send(self.application.bot, filepath, header, content)
             logger.info(f"Notified: new output {rel}")
         except Exception as e:
             logger.error(f"Output notification failed: {e}")
