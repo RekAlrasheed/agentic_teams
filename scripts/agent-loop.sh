@@ -88,6 +88,14 @@ BACKOFF_DELAY=0
 
 mkdir -p "$FAILED_DIR"
 
+# ── PM-specific: Load Health Check ────────────────────────────────────────────
+
+if [ "$AGENT_NAME" = "pm" ]; then
+    source "$SCRIPT_DIR/health-check.sh"
+    HEALTH_CHECK_INTERVAL=${HEALTH_CHECK_INTERVAL:-5}  # run every N loop cycles
+    HEALTH_CHECK_COUNTER=0
+fi
+
 # ── PM-specific: Start Telegram Bridge ────────────────────────────────────────
 
 BRIDGE_PID=""
@@ -287,6 +295,16 @@ while [ "$SESSION_COUNTER" -lt "$MAX_RESTARTS" ]; do
     if [ -f "$STOP_FILE" ]; then
         echo "[$DISPLAY_NAME] STOP signal. Halting."
         break
+    fi
+
+    # PM-only: Periodic health check of all agents
+    if [ "$AGENT_NAME" = "pm" ]; then
+        HEALTH_CHECK_COUNTER=$((HEALTH_CHECK_COUNTER + 1))
+        if [ "$HEALTH_CHECK_COUNTER" -ge "$HEALTH_CHECK_INTERVAL" ]; then
+            echo "[$DISPLAY_NAME] Running agent health check..."
+            run_health_check
+            HEALTH_CHECK_COUNTER=0
+        fi
     fi
 
     # Check for work
