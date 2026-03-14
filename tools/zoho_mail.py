@@ -2,15 +2,33 @@
 """
 Zoho Mail CLI tool for Navaia AI agents.
 Uses Zoho Mail REST API directly with OAuth2.
+Supports multiple accounts via --account flag.
 
 Usage:
   python tools/zoho_mail.py list [--limit 10]
+  python tools/zoho_mail.py list --account rakan [--limit 10]
   python tools/zoho_mail.py read <message_id>
   python tools/zoho_mail.py send --to "email" --subject "sub" --body "body"
   python tools/zoho_mail.py reply <message_id> --body "reply text"
   python tools/zoho_mail.py search --query "keyword"
   python tools/zoho_mail.py folders
+
+Accounts:
+  default (info@navaia.sa)  — use with no --account flag
+  rakan (ralrasheed@navaia.sa) — use with --account rakan
 """
+
+ACCOUNTS = {
+    'info': {
+        'email': 'info@navaia.sa',
+        'env_suffix': '',
+    },
+    'rakan': {
+        'email': 'ralrasheed@navaia.sa',
+        'env_suffix': '_2',
+    },
+}
+DEFAULT_ACCOUNT = 'info'
 
 import argparse
 import json
@@ -34,17 +52,34 @@ def load_env():
                         os.environ[key] = value
 
 
-def get_config():
-    """Get Zoho Mail config from environment."""
-    required = ['ZOHO_CLIENT_ID', 'ZOHO_CLIENT_SECRET', 'ZOHO_REFRESH_TOKEN', 'ZOHO_ACCOUNT_ID']
+def get_config(account_name=None):
+    """Get Zoho Mail config from environment for the specified account."""
+    if account_name is None:
+        account_name = DEFAULT_ACCOUNT
+
+    account = ACCOUNTS.get(account_name)
+    if not account:
+        print(f"Error: Unknown account '{account_name}'. Available: {', '.join(ACCOUNTS.keys())}", file=sys.stderr)
+        sys.exit(1)
+
+    suffix = account['env_suffix']
+    keys = {
+        'ZOHO_CLIENT_ID': f'ZOHO_CLIENT_ID{suffix}',
+        'ZOHO_CLIENT_SECRET': f'ZOHO_CLIENT_SECRET{suffix}',
+        'ZOHO_REFRESH_TOKEN': f'ZOHO_REFRESH_TOKEN{suffix}',
+        'ZOHO_ACCOUNT_ID': f'ZOHO_ACCOUNT_ID{suffix}',
+    }
+
     config = {}
-    for key in required:
-        val = os.environ.get(key)
+    for config_key, env_key in keys.items():
+        val = os.environ.get(env_key)
         if not val:
-            print(f"Error: {key} not set in .env or environment", file=sys.stderr)
+            print(f"Error: {env_key} not set in .env or environment", file=sys.stderr)
             sys.exit(1)
-        config[key] = val
+        config[config_key] = val
+
     config['ZOHO_DOMAIN'] = os.environ.get('ZOHO_DOMAIN', 'accounts.zoho.com')
+    config['from_email'] = account['email']
     return config
 
 
@@ -152,10 +187,10 @@ def cmd_read(args, token, account_id):
     print(content.get('content', '(empty)'))
 
 
-def cmd_send(args, token, account_id):
+def cmd_send(args, token, account_id, from_email='info@navaia.sa'):
     """Send a new email."""
     payload = {
-        'fromAddress': 'info@navaia.sa',
+        'fromAddress': from_email,
         'toAddress': args.to,
         'subject': args.subject,
         'content': args.body,
@@ -173,7 +208,7 @@ def cmd_send(args, token, account_id):
         print(f"Error: {json.dumps(data, indent=2)}")
 
 
-def cmd_reply(args, token, account_id):
+def cmd_reply(args, token, account_id, from_email='info@navaia.sa'):
     """Reply to an existing email."""
     # First read the original email to get details
     folders_data = api_get(token, account_id, 'folders')
@@ -192,7 +227,7 @@ def cmd_reply(args, token, account_id):
     orig_data = orig.get('data', {})
 
     payload = {
-        'fromAddress': 'info@navaia.sa',
+        'fromAddress': from_email,
         'toAddress': orig_data.get('fromAddress', ''),
         'subject': f"Re: {orig_data.get('subject', '')}",
         'content': args.body,
@@ -222,10 +257,10 @@ def cmd_search(args, token, account_id):
         print()
 
 
-def cmd_draft(args, token, account_id):
+def cmd_draft(args, token, account_id, from_email='info@navaia.sa'):
     """Save an email as draft."""
     payload = {
-        'fromAddress': 'info@navaia.sa',
+        'fromAddress': from_email,
         'toAddress': args.to,
         'subject': args.subject,
         'content': args.body,
@@ -243,6 +278,8 @@ def main():
     load_env()
 
     parser = argparse.ArgumentParser(description='Zoho Mail CLI for Navaia agents')
+    parser.add_argument('--account', choices=list(ACCOUNTS.keys()), default=DEFAULT_ACCOUNT,
+                        help=f'Account to use (default: {DEFAULT_ACCOUNT}). Options: info=info@navaia.sa, rakan=ralrasheed@navaia.sa')
     subparsers = parser.add_subparsers(dest='command', required=True)
 
     # folders
@@ -281,21 +318,30 @@ def main():
     p_draft.add_argument('--body', required=True, help='Body')
 
     args = parser.parse_args()
-    config = get_config()
+    config = get_config(args.account)
     token = get_access_token(config)
     account_id = config['ZOHO_ACCOUNT_ID']
+    from_email = config['from_email']
 
-    commands = {
+    # Commands that don't need from_email
+    simple_commands = {
         'folders': cmd_folders,
         'list': cmd_list,
         'read': cmd_read,
+        'search': cmd_search,
+    }
+
+    # Commands that need from_email
+    email_commands = {
         'send': cmd_send,
         'reply': cmd_reply,
-        'search': cmd_search,
         'draft': cmd_draft,
     }
 
-    commands[args.command](args, token, account_id)
+    if args.command in simple_commands:
+        simple_commands[args.command](args, token, account_id)
+    elif args.command in email_commands:
+        email_commands[args.command](args, token, account_id, from_email)
 
 
 if __name__ == '__main__':
