@@ -17,14 +17,14 @@ HEALTH_CHECK_DIR="${REPO_ROOT:-.}"
 HEALTH_STATE_DIR="/tmp/navaia-health"
 AGENTS=("creative" "technical" "admin")
 COMMS_DIR="$HEALTH_CHECK_DIR/workspace/comms/to-manager"
-FAILED_DIR="$HEALTH_CHECK_DIR/workspace/tasks/failed"
+HEALTH_FAILED_DIR="$HEALTH_CHECK_DIR/workspace/tasks/failed"
 
 # Max working time per model (seconds)
 MAX_TIME_HAIKU=900     # 15 min
 MAX_TIME_SONNET=1800   # 30 min
 MAX_TIME_OPUS=3600     # 60 min
 
-mkdir -p "$HEALTH_STATE_DIR" "$COMMS_DIR" "$FAILED_DIR"
+mkdir -p "$HEALTH_STATE_DIR" "$COMMS_DIR" "$HEALTH_FAILED_DIR"
 
 # ── Check for stale locks ────────────────────────────────────────────────────
 
@@ -111,7 +111,7 @@ _check_repeated_failures() {
                     echo "**Cycles seen:** $count"
                     echo "**Reason:** Task remained in folder for $count consecutive health checks"
                 } >> "$task_file"
-                mv "$task_file" "${FAILED_DIR}/${agent}-${base_name}"
+                mv "$task_file" "${HEALTH_FAILED_DIR}/${agent}-${base_name}"
                 rm -f "$state_file"
                 alerts="${alerts}- Moved **${base_name}** to failed/ — sat in ${agent}'s folder for ${count} cycles\n"
                 echo "[health-check] Moved stale task to failed: $agent/$base_name ($count cycles)" >&2

@@ -369,11 +369,11 @@ while [ "$SESSION_COUNTER" -lt "$MAX_RESTARTS" ]; do
     CLAUDE_STDERR=$(mktemp)
     CLAUDE_STDOUT=$(mktemp)
     START_TIME=$(date +%s)
-    MCP_FLAG=""
+    MCP_ARGS=()
     if [ -n "$MCP_CONFIG" ] && [ -f "$MCP_CONFIG" ]; then
-        MCP_FLAG="--mcp-config $MCP_CONFIG"
+        MCP_ARGS=(--mcp-config "$MCP_CONFIG")
     fi
-    claude --dangerously-skip-permissions --model "$SESSION_MODEL" --max-turns "$SESSION_MAX_TURNS" $MCP_FLAG "$PROMPT" >"$CLAUDE_STDOUT" 2>"$CLAUDE_STDERR" || CLAUDE_EXIT=$?
+    claude --dangerously-skip-permissions --model "$SESSION_MODEL" --max-turns "$SESSION_MAX_TURNS" "${MCP_ARGS[@]}" "$PROMPT" >"$CLAUDE_STDOUT" 2>"$CLAUDE_STDERR" || CLAUDE_EXIT=$?
     END_TIME=$(date +%s)
     DURATION_MS=$(( (END_TIME - START_TIME) * 1000 ))
     rm -f "/tmp/navaia-${AGENT_NAME}-working"
