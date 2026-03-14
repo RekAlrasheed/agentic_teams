@@ -597,31 +597,12 @@ function escapeHtml(s) { const d = document.createElement('div'); d.textContent 
 
 function selectAgent(a) {
   selectedAgent = a.id;
-  document.getElementById('agent-detail').style.display = 'block';
-  const cfg = AGENT_CFG[a.id] || {};
-  document.getElementById('detail-header').textContent = `${cfg.name || a.name} — ${a.role}`;
-  document.getElementById('detail-header').style.color = cfg.color || '#fff';
-  document.getElementById('detail-info').innerHTML = `
-    <div style="margin-bottom:8px"><span class="agent-state ${a.state}">${a.state}</span></div>
-    <div style="font-size:16px;margin-bottom:4px">Model: <b>${a.model}</b></div>
-    <div style="font-size:16px;margin-bottom:4px">Tasks: <b>${a.task_count}</b></div>
-    ${a.current_task ? `<div style="font-size:16px;color:var(--text-dim)">Working on: ${escapeHtml(a.current_task)}</div>` : ''}`;
-  window._officeAgentId = a.id;
+  AgentDetail.open(a.id);
 }
 
 function deselectAgent() {
   selectedAgent = null;
-  document.getElementById('agent-detail').style.display = 'none';
-}
-
-async function assignFromOffice(e) {
-  e.preventDefault();
-  const t = document.getElementById('office-task-title').value;
-  const d = document.getElementById('office-task-desc').value;
-  if (!t || !window._officeAgentId) return;
-  await CrewHQ.createTask(window._officeAgentId, t, d);
-  document.getElementById('office-task-title').value = '';
-  document.getElementById('office-task-desc').value = '';
+  AgentDetail.close();
 }
 
 /* ── Init ──────────────────────────────────────────────────── */
