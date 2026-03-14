@@ -81,6 +81,8 @@ mkdir -p "$TASK_DIR"
 STOP_FILE="workspace/comms/STOP"
 MAX_RESTARTS=${MAX_RESTARTS:-200}
 SESSION_COUNTER=0
+CONSECUTIVE_FAILURES=0
+BACKOFF_DELAY=0
 
 # ── PM-specific: Start Telegram Bridge ────────────────────────────────────────
 
@@ -284,8 +286,58 @@ while [ "$SESSION_COUNTER" -lt "$MAX_RESTARTS" ]; do
 
     # Launch Claude — lock file signals "WORKING" to the dashboard
     touch "/tmp/navaia-${AGENT_NAME}-working"
-    claude --dangerously-skip-permissions --model "$SESSION_MODEL" --max-turns 15 "$PROMPT" || true
+
+    CLAUDE_EXIT=0
+    CLAUDE_STDERR=$(mktemp)
+    claude --dangerously-skip-permissions --model "$SESSION_MODEL" --max-turns 15 "$PROMPT" 2>"$CLAUDE_STDERR" || CLAUDE_EXIT=$?
     rm -f "/tmp/navaia-${AGENT_NAME}-working"
+
+    # ── Rate limit detection and backoff ──────────────────────────────────
+    STDERR_CONTENT=""
+    if [ -f "$CLAUDE_STDERR" ]; then
+        STDERR_CONTENT=$(cat "$CLAUDE_STDERR" 2>/dev/null || true)
+        rm -f "$CLAUDE_STDERR"
+    fi
+
+    if echo "$STDERR_CONTENT" | grep -qi "rate.limit\|429\|too many requests\|overloaded\|capacity"; then
+        CONSECUTIVE_FAILURES=$((CONSECUTIVE_FAILURES + 1))
+        # Exponential backoff: 30s, 60s, 120s, 240s, capped at 300s
+        BACKOFF_DELAY=$((30 * (2 ** (CONSECUTIVE_FAILURES - 1))))
+        if [ "$BACKOFF_DELAY" -gt 300 ]; then
+            BACKOFF_DELAY=300
+        fi
+        echo "[$DISPLAY_NAME] Rate limited (attempt $CONSECUTIVE_FAILURES). Backing off ${BACKOFF_DELAY}s..."
+        # Notify Founder if repeated
+        if [ "$CONSECUTIVE_FAILURES" -ge 3 ]; then
+            mkdir -p workspace/comms/to-founder
+            cat > "workspace/comms/to-founder/$(date '+%Y%m%d-%H%M%S')-rate-limit.md" <<RATELIMIT
+## RATE LIMIT WARNING
+
+**Agent:** $DISPLAY_NAME
+**Consecutive rate limits:** $CONSECUTIVE_FAILURES
+**Backing off:** ${BACKOFF_DELAY}s
+
+Will resume automatically after backoff.
+RATELIMIT
+        fi
+        sleep "$BACKOFF_DELAY"
+        continue
+    elif [ "$CLAUDE_EXIT" -ne 0 ] && [ -n "$STDERR_CONTENT" ]; then
+        # Non-rate-limit error — log but don't backoff as aggressively
+        CONSECUTIVE_FAILURES=$((CONSECUTIVE_FAILURES + 1))
+        BACKOFF_DELAY=$((10 * CONSECUTIVE_FAILURES))
+        if [ "$BACKOFF_DELAY" -gt 120 ]; then
+            BACKOFF_DELAY=120
+        fi
+        echo "[$DISPLAY_NAME] Claude exited with code $CLAUDE_EXIT. Waiting ${BACKOFF_DELAY}s..."
+        echo "[$DISPLAY_NAME] stderr: ${STDERR_CONTENT:0:200}"
+        sleep "$BACKOFF_DELAY"
+        continue
+    else
+        # Success — reset failure counter
+        CONSECUTIVE_FAILURES=0
+        BACKOFF_DELAY=0
+    fi
 
     echo "[$DISPLAY_NAME] Session #${SESSION_COUNTER} done. Next check in 15s..."
     sleep 15
