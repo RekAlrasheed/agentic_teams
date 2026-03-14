@@ -43,7 +43,7 @@ case "$AGENT_NAME" in
     pm)
         DISPLAY_NAME="Navi (PM)"
         TASK_DIR="workspace/tasks/inbox"
-        EXTRA_DIRS="workspace/tasks/active workspace/comms/from-founder"
+        EXTRA_DIRS="workspace/tasks/active workspace/comms/from-manager"
         MODEL="sonnet"
         AGENT_CLAUDE_MD="agents/pm/CLAUDE.md"
         ;;
@@ -175,13 +175,13 @@ STARTUP:
 1. Read CLAUDE.md for full instructions
 2. Check workspace/tasks/inbox/ for new tasks
 3. Check workspace/tasks/active/ for in-progress work
-4. Check workspace/comms/from-founder/ for replies
+4. Check workspace/comms/from-manager/ for replies
 5. If ALL empty — EXIT immediately
 6. For each task: analyze it, decide which agent(s) should handle it
 7. Write agent-specific task files to dispatch work
-8. Send status to Manager via workspace/comms/to-founder/
+8. Send status to Manager via workspace/comms/to-manager/
 
-NEVER ask questions in the terminal. Route questions via workspace/comms/to-founder/.
+NEVER ask questions in the terminal. Route questions via workspace/comms/to-manager/.
 Begin now.
 PROMPT
     else
@@ -202,7 +202,7 @@ Before starting any task, assess its complexity:
 2. If the task is SIMPLE (clear instructions, under 5 minutes of work) → execute immediately.
 3. If the task is COMPLEX (multi-step, ambiguous, architectural, risky) → DO NOT start working.
    Instead:
-   a. Write a plan to workspace/comms/to-founder/ explaining:
+   a. Write a plan to workspace/comms/to-manager/ explaining:
       - What you understand the task to be
       - Your proposed approach (steps)
       - Estimated scope
@@ -210,12 +210,12 @@ Before starting any task, assess its complexity:
    b. Wait for approval in workspace/comms/from-manager/ before proceeding.
 4. If the task is UNCLEAR (missing info, ambiguous requirements) → DO NOT guess.
    Instead:
-   a. Write your questions to workspace/comms/to-founder/
+   a. Write your questions to workspace/comms/to-manager/
    b. Wait for answers in workspace/comms/from-manager/ before proceeding.
 
 When done:
 1. Move the task file to workspace/tasks/done/
-2. Write a DETAILED completion report to workspace/comms/to-founder/ that includes:
+2. Write a DETAILED completion report to workspace/comms/to-manager/ that includes:
    - What you did (summary of work)
    - Key results or answers the Manager needs
    - Path to output file(s) in workspace/outputs/${AGENT_NAME}/
@@ -223,7 +223,7 @@ When done:
    The Manager reads this on Telegram — make it complete and useful.
 
 If no tasks in your folder — EXIT immediately to save tokens.
-NEVER ask questions in the terminal. All questions go through workspace/comms/to-founder/.
+NEVER ask questions in the terminal. All questions go through workspace/comms/to-manager/.
 Begin now.
 PROMPT
     fi
@@ -301,6 +301,23 @@ while [ "$SESSION_COUNTER" -lt "$MAX_RESTARTS" ]; do
     SESSION_COUNTER=$((SESSION_COUNTER + 1))
     TASK_COUNT=$(count_tasks "$TASK_DIR")
 
+    # Always ensure we're on main before starting a session
+    # Agents create feature branches for their work, but the repo must start from main
+    CURRENT_BRANCH=$(git branch --show-current 2>/dev/null)
+    if [ "$CURRENT_BRANCH" != "main" ] && [ -n "$CURRENT_BRANCH" ]; then
+        echo "[$DISPLAY_NAME] WARNING: Repo on branch '$CURRENT_BRANCH', switching to main..."
+        git stash -q 2>/dev/null || true
+        git checkout main -q 2>/dev/null || true
+    fi
+
+    # Clean stale lock files (agent not actually running)
+    if [ -f "/tmp/navaia-${AGENT_NAME}-working" ]; then
+        if ! pgrep -f "claude.*--model" >/dev/null 2>&1; then
+            echo "[$DISPLAY_NAME] Cleaning stale lock file"
+            rm -f "/tmp/navaia-${AGENT_NAME}-working"
+        fi
+    fi
+
     # Auto-detect model and max turns from task file (set by Navi)
     SESSION_MODEL=$(detect_model)
     SESSION_MAX_TURNS=$(detect_max_turns "$SESSION_MODEL")
@@ -341,7 +358,7 @@ try:
     if warning:
         print(f'[BUDGET] {warning}')
         from pathlib import Path
-        alert_dir = Path('workspace/comms/to-founder')
+        alert_dir = Path('workspace/comms/to-manager')
         alert_dir.mkdir(parents=True, exist_ok=True)
         from datetime import datetime, timezone
         ts = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
@@ -372,8 +389,8 @@ except Exception:
         echo "[$DISPLAY_NAME] Rate limited (attempt $CONSECUTIVE_FAILURES). Backing off ${BACKOFF_DELAY}s..."
         # Notify Manager if repeated
         if [ "$CONSECUTIVE_FAILURES" -ge 3 ]; then
-            mkdir -p workspace/comms/to-founder
-            cat > "workspace/comms/to-founder/$(date '+%Y%m%d-%H%M%S')-rate-limit.md" <<RATELIMIT
+            mkdir -p workspace/comms/to-manager
+            cat > "workspace/comms/to-manager/$(date '+%Y%m%d-%H%M%S')-rate-limit.md" <<RATELIMIT
 ## RATE LIMIT WARNING
 
 **Agent:** $DISPLAY_NAME
@@ -405,8 +422,8 @@ RATELIMIT
                 echo "[$DISPLAY_NAME] Moved to dead letter: $base_name"
             done < <(find "$TASK_DIR" -maxdepth 1 -type f ! -name '.gitkeep' 2>/dev/null)
             # Notify Manager
-            mkdir -p workspace/comms/to-founder
-            cat > "workspace/comms/to-founder/$(date '+%Y%m%d-%H%M%S')-task-failed.md" <<TASKFAIL
+            mkdir -p workspace/comms/to-manager
+            cat > "workspace/comms/to-manager/$(date '+%Y%m%d-%H%M%S')-task-failed.md" <<TASKFAIL
 ## TASK FAILURE
 
 **Agent:** $DISPLAY_NAME

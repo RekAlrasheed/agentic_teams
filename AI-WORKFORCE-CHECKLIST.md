@@ -9,8 +9,8 @@
 ### Communication
 - [x] Telegram bot receives and responds to Manager messages
 - [x] Dashboard chat processes messages through NaviCore
-- [x] Agents write completion reports to `workspace/comms/to-founder/`
-- [x] OutboxWatcher sends to-founder messages to Telegram
+- [x] Agents write completion reports to `workspace/comms/to-manager/`
+- [x] OutboxWatcher sends to-manager messages to Telegram
 - [x] OutputWatcher notifies Manager of new deliverables
 - [x] TaskDoneWatcher notifies Manager when tasks complete
 - [x] Startup scan catches missed notifications (bridge restart recovery)

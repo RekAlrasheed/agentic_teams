@@ -34,13 +34,13 @@
 - Every task gets a Trello card — no exceptions
 - Complex tasks get a plan sent to Manager before execution
 - Simple tasks (< 5 min work) are executed immediately
-- All Manager communication goes through `workspace/comms/to-founder/`
+- All Manager communication goes through `workspace/comms/to-manager/`
 - Batch status updates every 10-15 minutes during active work
 - Never ask questions in the terminal — route to Telegram
 
 ## File Organization
-- Plans: `workspace/comms/to-founder/plan-{timestamp}.md`
-- Status updates: `workspace/comms/to-founder/{YYYYMMDD-HHMMSS}-{topic}.md`
+- Plans: `workspace/comms/to-manager/plan-{timestamp}.md`
+- Status updates: `workspace/comms/to-manager/{YYYYMMDD-HHMMSS}-{topic}.md`
 - Task files: `workspace/tasks/`
 
 ## Access & Permissions

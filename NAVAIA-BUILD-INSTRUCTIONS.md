@@ -101,8 +101,8 @@ navaia/
 │   │   ├── technical/
 │   │   └── admin/
 │   └── comms/
-│       ├── to-founder/          ← Messages TO Manager (sent via Telegram)
-│       ├── from-founder/        ← Messages FROM Manager (received via Telegram)
+│       ├── to-manager/          ← Messages TO Manager (sent via Telegram)
+│       ├── from-manager/        ← Messages FROM Manager (received via Telegram)
 │       └── inter-agent/         ← Agent-to-agent file handoffs
 │
 ├── tools/                       ← Integration scripts
@@ -125,12 +125,12 @@ This is the most important file. The PM agent reads this on every startup. Write
 
 ### Agent Behavior Rules
 
-1. **NEVER ask anything in the terminal.** All questions go to Telegram via `workspace/comms/to-founder/` files. The system runs with `--dangerously-skip-permissions` so the terminal is non-interactive.
+1. **NEVER ask anything in the terminal.** All questions go to Telegram via `workspace/comms/to-manager/` files. The system runs with `--dangerously-skip-permissions` so the terminal is non-interactive.
 
 2. **ALWAYS propose a plan before executing complex tasks.**
    - When the Manager sends a new task, the PM breaks it down into subtasks
-   - PM writes the plan to `workspace/comms/to-founder/plan-{timestamp}.md`
-   - PM waits for the Manager's approval in `workspace/comms/from-founder/` before proceeding
+   - PM writes the plan to `workspace/comms/to-manager/plan-{timestamp}.md`
+   - PM waits for the Manager's approval in `workspace/comms/from-manager/` before proceeding
    - For simple tasks (under 5 minutes of work), just execute immediately
 
 3. **If you can't do something as requested — STOP and ASK.**
@@ -201,7 +201,7 @@ Agents update cards by calling the Trello API via bash (using helpers in `tools/
 - Each file contains the task text, timestamp, and source
 
 **Sending messages to Manager:**
-- Write a markdown file to `workspace/comms/to-founder/`
+- Write a markdown file to `workspace/comms/to-manager/`
 - Filename format: `{YYYYMMDD-HHMMSS}-{topic}.md`
 - The Telegram bridge watches this folder and sends new files to the Manager
 - Keep messages concise — the Manager reads on mobile
@@ -218,7 +218,7 @@ Agents update cards by calling the Trello API via bash (using helpers in `tools/
 ```
 
 **Receiving Manager replies:**
-- Replies appear in `workspace/comms/from-founder/`
+- Replies appear in `workspace/comms/from-manager/`
 - Check this folder when waiting for approval
 
 ### Team Spawn Instructions
@@ -360,7 +360,7 @@ Create `tools/telegram_bridge.py` — a Python script that runs alongside Claude
 
 **Telegram → Filesystem (Manager sends a message):**
 1. Manager sends a message to the Telegram bot
-2. Script saves it as a markdown file in `workspace/tasks/inbox/` (for new tasks) or `workspace/comms/from-founder/` (for replies)
+2. Script saves it as a markdown file in `workspace/tasks/inbox/` (for new tasks) or `workspace/comms/from-manager/` (for replies)
 3. File format:
 ```markdown
 ## NEW TASK FROM FOUNDER
@@ -371,7 +371,7 @@ Create `tools/telegram_bridge.py` — a Python script that runs alongside Claude
 ```
 
 **Filesystem → Telegram (Agent sends a message to Manager):**
-1. Uses `watchdog` library to monitor `workspace/comms/to-founder/` for new files
+1. Uses `watchdog` library to monitor `workspace/comms/to-manager/` for new files
 2. When a new .md file appears, read its content
 3. Send it to the Manager's Telegram chat
 4. Truncate if over 4000 chars (Telegram limit) with a note that full message is in the file
@@ -539,8 +539,8 @@ node_modules/
 # Don't commit active workspace files (they're ephemeral)
 workspace/tasks/inbox/*
 workspace/tasks/active/*
-workspace/comms/to-founder/*
-workspace/comms/from-founder/*
+workspace/comms/to-manager/*
+workspace/comms/from-manager/*
 workspace/comms/inter-agent/*
 workspace/comms/STOP
 
@@ -589,7 +589,7 @@ Agent Teams teammates work in parallel by default. When the PM assigns 3 tasks t
 ### Error Recovery
 - If a teammate crashes or gets stuck, the PM should note the failure on Trello, attempt to re-assign the task, and notify the Manager only if it fails twice.
 - If the Trello API fails (rate limit, bad auth), log the error and continue. Don't block real work because of a tracking tool failure.
-- If the Telegram bridge is down, write messages to `workspace/comms/to-founder/` anyway. They'll be sent when the bridge comes back up.
+- If the Telegram bridge is down, write messages to `workspace/comms/to-manager/` anyway. They'll be sent when the bridge comes back up.
 
 ### File Handoffs Between Agents
 When one agent produces output that another agent needs:

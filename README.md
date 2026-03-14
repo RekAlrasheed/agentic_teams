@@ -143,7 +143,7 @@ navaia/
 ├── workspace/               ← Active work area
 │   ├── tasks/               ← inbox/, active/, done/, rejected/
 │   ├── outputs/             ← creative/, technical/, admin/
-│   └── comms/               ← to-founder/, from-founder/, inter-agent/
+│   └── comms/               ← to-manager/, from-manager/, inter-agent/
 ├── tools/                   ← Integration scripts
 │   ├── telegram_bridge.py   ← Telegram ↔ filesystem bridge
 │   ├── trello_api.sh        ← Trello helper functions

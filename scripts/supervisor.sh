@@ -101,7 +101,7 @@ send_alert() {
     local message="$1"
     if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_FOUNDER_CHAT_ID:-}" ]; then
         # Write to outbox so bridge sends it (or direct API if bridge is down)
-        local alert_file="workspace/comms/to-founder/$(date '+%Y%m%d-%H%M%S')-supervisor-alert.md"
+        local alert_file="workspace/comms/to-manager/$(date '+%Y%m%d-%H%M%S')-supervisor-alert.md"
         cat > "$alert_file" <<EOF
 ## SUPERVISOR ALERT
 

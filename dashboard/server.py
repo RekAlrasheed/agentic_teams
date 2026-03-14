@@ -42,8 +42,8 @@ BLOCKED_DIR = TASKS_DIR / "blocked"
 REJECTED_DIR = TASKS_DIR / "rejected"
 OUTPUTS_DIR = WORKSPACE / "outputs"
 COMMS_DIR = WORKSPACE / "comms"
-TO_FOUNDER_DIR = COMMS_DIR / "to-founder"
-FROM_FOUNDER_DIR = COMMS_DIR / "from-founder"
+TO_FOUNDER_DIR = COMMS_DIR / "to-manager"
+FROM_FOUNDER_DIR = COMMS_DIR / "from-manager"
 INTER_AGENT_DIR = COMMS_DIR / "inter-agent"
 CHAT_LOG = DASHBOARD_DIR / "chat_history.jsonl"
 FAILED_DIR = TASKS_DIR / "failed"
@@ -57,7 +57,7 @@ TRELLO_BOARD_ID = os.getenv("TRELLO_BOARD_ID", "")
 
 DEFAULT_AGENTS = [
     {"id": "pm", "name": "Navi", "role": "PM", "model": "sonnet", "color": "#4a9eff",
-     "task_dir": "workspace/tasks/inbox", "extra_dirs": ["workspace/tasks/active", "workspace/comms/from-founder"]},
+     "task_dir": "workspace/tasks/inbox", "extra_dirs": ["workspace/tasks/active", "workspace/comms/from-manager"]},
     {"id": "creative", "name": "Muse", "role": "Creative", "model": "sonnet", "color": "#ff8c42",
      "task_dir": "workspace/tasks/creative"},
     {"id": "technical", "name": "Arch", "role": "Technical", "model": "sonnet", "color": "#a855f7",

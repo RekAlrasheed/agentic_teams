@@ -1,0 +1,40 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "REPO_ROOT_PLACEHOLDER/workspace",
+        "REPO_ROOT_PLACEHOLDER/knowledge"
+      ]
+    },
+    "sqlite-tasks": {
+      "command": "npx",
+      "args": ["-y", "mcp-sqlite", "--db-path", "REPO_ROOT_PLACEHOLDER/workspace/tasks.db"]
+    },
+    "sqlite-tokens": {
+      "command": "npx",
+      "args": ["-y", "mcp-sqlite", "--db-path", "REPO_ROOT_PLACEHOLDER/workspace/token_usage.db"]
+    },
+    "trello": {
+      "command": "npx",
+      "args": ["-y", "@delorenj/mcp-server-trello"],
+      "env": {
+        "TRELLO_API_KEY": "${TRELLO_KEY}",
+        "TRELLO_TOKEN": "${TRELLO_TOKEN}"
+      }
+    },
+    "system-info": {
+      "command": "npx",
+      "args": ["-y", "mcp-system-info"]
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      }
+    }
+  }
+}

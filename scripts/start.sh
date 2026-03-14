@@ -99,11 +99,11 @@ STARTUP SEQUENCE:
 3. Check workspace/tasks/active/ for any in-progress work
 4. If ALL folders are EMPTY (no tasks, no active work, no founder messages) — EXIT IMMEDIATELY to save tokens. Do not idle.
 5. Only if there IS work: spawn teammates using the CHEAPEST model that can handle each task (Haiku > Sonnet > Opus)
-6. Send a status update to the Manager via workspace/comms/to-founder/
+6. Send a status update to the Manager via workspace/comms/to-manager/
 
 COST RULES: Always use the cheapest model possible. Haiku for simple tasks, Sonnet for content/code, Opus ONLY for complex architecture.
 You are running in autonomous mode. NEVER ask questions in the terminal.
-Route all questions to the Manager via Telegram (workspace/comms/to-founder/).
+Route all questions to the Manager via Telegram (workspace/comms/to-manager/).
 
 Begin your startup sequence now."
 

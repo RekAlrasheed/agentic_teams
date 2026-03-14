@@ -98,7 +98,7 @@ while [ "$SESSION_COUNTER" -lt "$MAX_RESTARTS" ]; do
     # ── Check if there's any work BEFORE launching Claude (saves tokens) ────
     INBOX_COUNT=$(find workspace/tasks/inbox -type f ! -name '.gitkeep' 2>/dev/null | wc -l | tr -d ' ')
     ACTIVE_COUNT=$(find workspace/tasks/active -type f ! -name '.gitkeep' 2>/dev/null | wc -l | tr -d ' ')
-    FOUNDER_MSG_COUNT=$(find workspace/comms/from-founder -type f ! -name '.gitkeep' 2>/dev/null | wc -l | tr -d ' ')
+    FOUNDER_MSG_COUNT=$(find workspace/comms/from-manager -type f ! -name '.gitkeep' 2>/dev/null | wc -l | tr -d ' ')
 
     if [ "$INBOX_COUNT" -eq 0 ] && [ "$ACTIVE_COUNT" -eq 0 ] && [ "$FOUNDER_MSG_COUNT" -eq 0 ]; then
         echo "😴 $(date '+%H:%M:%S') — No tasks. Sleeping 60s... (send a task via Telegram to wake up)"
@@ -130,13 +130,13 @@ STARTUP SEQUENCE:
 1. Read CLAUDE.md for your full instructions
 2. Check workspace/tasks/inbox/ for new tasks from the Manager
 3. Check workspace/tasks/active/ for any in-progress work
-4. Check workspace/comms/from-founder/ for replies
+4. Check workspace/comms/from-manager/ for replies
 5. If ALL folders are EMPTY — EXIT IMMEDIATELY to save tokens. Do not idle.
 6. For each task: analyze it, decide which agent(s) should handle it
 7. Write agent-specific task files to dispatch work
-8. Send status to Manager via workspace/comms/to-founder/
+8. Send status to Manager via workspace/comms/to-manager/
 
-NEVER ask questions in the terminal. Route questions via workspace/comms/to-founder/.
+NEVER ask questions in the terminal. Route questions via workspace/comms/to-manager/.
 Begin your startup sequence now."
     else
         PROMPT="You are Navi, the PM Agent of Navaia's AI Workforce.
@@ -145,10 +145,10 @@ This is session #${SESSION_COUNTER}. DISPATCH tasks via files, NOT Agent tool.
 RESUME SEQUENCE:
 1. Check workspace/tasks/inbox/ for NEW tasks from the Manager
 2. Check workspace/tasks/active/ for IN-PROGRESS work
-3. Check workspace/comms/from-founder/ for replies
+3. Check workspace/comms/from-manager/ for replies
 4. If ALL are EMPTY — EXIT IMMEDIATELY. No work = no tokens burned.
 5. Dispatch tasks by writing files to workspace/tasks/{creative,technical,admin}/
-6. Send a brief status update to the Manager via workspace/comms/to-founder/
+6. Send a brief status update to the Manager via workspace/comms/to-manager/
 
 NEVER ask questions in the terminal. NEVER use Agent tool to spawn teammates.
 Resume operations now."

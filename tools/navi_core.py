@@ -62,8 +62,8 @@ ACTIVE_DIR = TASKS_DIR / "active"
 DONE_DIR = TASKS_DIR / "done"
 BLOCKED_DIR = TASKS_DIR / "blocked"
 FAILED_DIR = TASKS_DIR / "failed"
-FROM_FOUNDER_DIR = WORKSPACE / "comms" / "from-founder"
-TO_FOUNDER_DIR = WORKSPACE / "comms" / "to-founder"
+FROM_FOUNDER_DIR = WORKSPACE / "comms" / "from-manager"
+TO_FOUNDER_DIR = WORKSPACE / "comms" / "to-manager"
 OUTPUTS_DIR = WORKSPACE / "outputs"
 KNOWLEDGE_DIR = REPO_ROOT / "knowledge"
 
@@ -488,7 +488,7 @@ def create_task(title: str, description: str, agent: str = "PM", source: str = "
         except Exception as e:
             logger.warning(f"TaskDB insert failed (non-blocking): {e}")
 
-    # Write to from-founder so agents can pick it up
+    # Write to from-manager so agents can pick it up
     FROM_FOUNDER_DIR.mkdir(parents=True, exist_ok=True)
     reply_file = FROM_FOUNDER_DIR / f"{timestamp_us}-task-created.md"
     reply_file.write_text(
