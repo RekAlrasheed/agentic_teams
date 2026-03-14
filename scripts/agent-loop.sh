@@ -226,6 +226,28 @@ detect_model() {
     echo "$base_model"
 }
 
+detect_max_turns() {
+    # Navi (PM) can specify max turns in the task file as **Max-Turns:** <number>
+    # If specified, use it. Otherwise pick a default based on model.
+    while IFS= read -r f; do
+        local specified
+        specified=$(grep -i '^\*\*Max-Turns:\*\*' "$f" 2>/dev/null | head -1 | sed 's/.*\*\*Max-Turns:\*\*[[:space:]]*//' | tr -d '[:space:]')
+        if [ -n "$specified" ] && [ "$specified" -gt 0 ] 2>/dev/null; then
+            echo "$specified"
+            return
+        fi
+    done < <(find "$TASK_DIR" -maxdepth 1 -type f ! -name '.gitkeep' 2>/dev/null)
+
+    # Smart defaults based on model — complex tasks get more room
+    local model="${1:-sonnet}"
+    case "$model" in
+        opus)   echo "50" ;;
+        sonnet) echo "25" ;;
+        haiku)  echo "15" ;;
+        *)      echo "15" ;;
+    esac
+}
+
 # ── Main Loop ────────────────────────────────────────────────────────────────
 
 echo ""
@@ -256,9 +278,10 @@ while [ "$SESSION_COUNTER" -lt "$MAX_RESTARTS" ]; do
     SESSION_COUNTER=$((SESSION_COUNTER + 1))
     TASK_COUNT=$(count_tasks "$TASK_DIR")
 
-    # Auto-detect model based on task complexity
+    # Auto-detect model and max turns from task file (set by Navi)
     SESSION_MODEL=$(detect_model)
-    echo "[$DISPLAY_NAME] Session #${SESSION_COUNTER} — ${TASK_COUNT} task(s) found — Model: $SESSION_MODEL"
+    SESSION_MAX_TURNS=$(detect_max_turns "$SESSION_MODEL")
+    echo "[$DISPLAY_NAME] Session #${SESSION_COUNTER} — ${TASK_COUNT} task(s) — Model: $SESSION_MODEL — Max turns: $SESSION_MAX_TURNS"
 
     PROMPT=$(build_prompt)
 
@@ -269,7 +292,7 @@ while [ "$SESSION_COUNTER" -lt "$MAX_RESTARTS" ]; do
     CLAUDE_STDERR=$(mktemp)
     CLAUDE_STDOUT=$(mktemp)
     START_TIME=$(date +%s)
-    claude --dangerously-skip-permissions --model "$SESSION_MODEL" --max-turns 15 "$PROMPT" >"$CLAUDE_STDOUT" 2>"$CLAUDE_STDERR" || CLAUDE_EXIT=$?
+    claude --dangerously-skip-permissions --model "$SESSION_MODEL" --max-turns "$SESSION_MAX_TURNS" "$PROMPT" >"$CLAUDE_STDOUT" 2>"$CLAUDE_STDERR" || CLAUDE_EXIT=$?
     END_TIME=$(date +%s)
     DURATION_MS=$(( (END_TIME - START_TIME) * 1000 ))
     rm -f "/tmp/navaia-${AGENT_NAME}-working"

@@ -738,6 +738,149 @@ _RETRY_SYSTEM_PROMPT = (
 )
 
 
+# ── Per-Agent Chat ────────────────────────────────────────────────────────────
+
+def _agent_chat_log(agent_id: str) -> Path:
+    """Returns per-agent chat history file path."""
+    return DASHBOARD_DIR / f"chat_{agent_id}.jsonl"
+
+
+_AGENT_PERSONAS: dict[str, tuple[str, str, str]] = {
+    "creative": ("Muse", "Creative & Marketing", "content, social media, campaigns, brand, copywriting, outreach, image briefs"),
+    "technical": ("Arch", "Technical Lead", "code, debugging, infrastructure, APIs, GitHub, deployments, security"),
+    "admin": ("Sage", "Admin & Finance", "documents, proposals, research, finance, compliance, spreadsheets"),
+    "pm": ("Navi", "PM & Team Lead", "task routing, team coordination, Founder communications, project management"),
+}
+
+_AGENT_CHAT_SYSTEM = """\
+You are {name}, Navaia's {role} AI agent chatting directly with the Founder.
+Specialty: {description}.
+Company: Navaia — AI-powered real estate tech, Riyadh. Products: Bilal (voice agent) + Baian (chat agent).
+
+Status: {status}
+
+Prior chat:
+{history}
+
+Rules:
+- Be concise (max 150 words unless more detail is asked for)
+- Stay in character as {name}, the {role}
+- If asked about work outside your specialty, acknowledge and suggest routing to the right agent
+- Match the Founder's language (English or Arabic)
+"""
+
+
+def save_agent_message(agent_id: str, role: str, text: str, source: str = "dashboard") -> dict:
+    """Append a message to the per-agent JSONL chat history with file locking."""
+    chat_log = _agent_chat_log(agent_id)
+    msg = {
+        "role": role,
+        "text": text,
+        "source": source,
+        "time": datetime.now(timezone.utc).isoformat(),
+    }
+    chat_log.parent.mkdir(parents=True, exist_ok=True)
+    with open(chat_log, "a+") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        f.write(json.dumps(msg) + "\n")
+        f.seek(0)
+        lines = f.readlines()
+        if len(lines) > _TRIM_THRESHOLD:
+            f.seek(0)
+            f.truncate()
+            f.writelines(lines[-_TRIM_TARGET:])
+    return msg
+
+
+def load_agent_history(agent_id: str, limit: int = 50) -> list[dict]:
+    """Load the last N messages from per-agent JSONL."""
+    chat_log = _agent_chat_log(agent_id)
+    if not chat_log.exists() or limit <= 0:
+        return []
+    try:
+        with open(chat_log, "r") as f:
+            fcntl.flock(f, fcntl.LOCK_SH)
+            lines = f.readlines()
+    except Exception:
+        return []
+    messages = []
+    for line in lines[-limit:]:
+        line = line.strip()
+        if line:
+            try:
+                messages.append(json.loads(line))
+            except json.JSONDecodeError:
+                pass
+    return messages
+
+
+def _build_agent_system_prompt(agent_id: str) -> str:
+    name, role, description = _AGENT_PERSONAS.get(agent_id, _AGENT_PERSONAS["pm"])
+
+    agent_dirs: dict[str, list[Path]] = {
+        "pm": [INBOX_DIR, ACTIVE_DIR],
+        "creative": [TASKS_DIR / "creative"],
+        "technical": [TASKS_DIR / "technical"],
+        "admin": [TASKS_DIR / "admin"],
+    }
+    dirs = agent_dirs.get(agent_id, [])
+    task_count = sum(_count_files(d) for d in dirs)
+    lock = Path(f"/tmp/navaia-{agent_id}-working")
+    state = "WORKING" if lock.exists() else ("STARTING" if task_count > 0 else "IDLE")
+    status = f"{state} — {task_count} task(s) queued"
+
+    history = load_agent_history(agent_id, 5)
+    if history:
+        lines = []
+        for m in history:
+            prefix = "Founder" if m["role"] == "user" else name
+            lines.append(f"{prefix}: {m.get('text', '')[:120]}")
+        history_text = "\n".join(lines)
+    else:
+        history_text = "No previous messages."
+
+    return _AGENT_CHAT_SYSTEM.format(
+        name=name, role=role, description=description,
+        status=status, history=history_text,
+    )
+
+
+def _strip_json_if_needed(text: str) -> str:
+    """If response is JSON with a 'message' key, extract just the message text."""
+    stripped = text.strip()
+    if stripped.startswith("{"):
+        try:
+            parsed = json.loads(stripped)
+            if isinstance(parsed, dict) and "message" in parsed:
+                return str(parsed["message"])
+        except Exception:
+            pass
+    return text
+
+
+def ask_agent_sync(agent_id: str, message: str, source: str = "dashboard") -> dict:
+    """Chat directly with a specific agent (plain text response, no task creation)."""
+    save_agent_message(agent_id, "user", message, source)
+    system_prompt = _build_agent_system_prompt(agent_id)
+    model = _detect_model(message)
+
+    raw = ""
+    try:
+        raw = _call_claude(message, system_prompt, model, "1")
+    except subprocess.TimeoutExpired:
+        pass
+    except Exception as e:
+        logger.error(f"ask_agent_sync error: {type(e).__name__}")
+
+    if not raw:
+        reply = "I'm having trouble right now. Try again in a moment."
+    else:
+        reply = _strip_json_if_needed(raw)[:4000]
+
+    save_agent_message(agent_id, "assistant", reply, source)
+    return {"message": reply}
+
+
 async def ask_async(message: str, source: str = "telegram") -> dict:
     """Async Claude call — used by Telegram bot (asyncio subprocess).
 
