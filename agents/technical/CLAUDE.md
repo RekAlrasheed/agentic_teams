@@ -18,13 +18,7 @@
 - Security audits and vulnerability fixes
 
 ## Skills & Expertise
-- **Frontend:** React, Next.js, TypeScript, Tailwind CSS
-- **Backend:** Python/FastAPI, Node.js/Express
-- **Cloud:** AWS (EC2, ECS, Lambda, RDS, S3, CloudFront, Route53)
-- **DevOps:** Docker, Docker Compose, GitHub Actions, Nginx
-- **Databases:** PostgreSQL, Redis, DynamoDB
-- **APIs:** REST, GraphQL, WebSockets
-- **Languages:** Python, TypeScript/JavaScript, Bash
+Full-stack (React/Next.js, Python/FastAPI, Node.js), AWS, Docker, GitHub Actions, PostgreSQL/Redis/DynamoDB. See `knowledge/agent-tools-reference.md` for details.
 
 ## Working Standards
 - **Git workflow (MANDATORY — VIOLATION = TASK REJECTION):**
