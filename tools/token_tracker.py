@@ -338,6 +338,49 @@ class TokenTracker:
             return "0%"
         return f"{part / total * 100:.0f}%"
 
+    # ── Budget alerts ──────────────────────────────────────────────────
+
+    def check_budget(self, daily_limit: int = 500_000) -> Optional[str]:
+        """Check if today's weighted token usage exceeds the daily budget.
+
+        Returns a warning message if over budget, None otherwise.
+        Default limit: 500K weighted tokens/day (~reasonable for Max plan).
+        """
+        conn = self._get_conn()
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        row = conn.execute(
+            "SELECT COALESCE(SUM(weighted_tokens), 0) as total FROM token_usage WHERE date_key = ?",
+            (today,),
+        ).fetchone()
+
+        used = row["total"] if row else 0
+        pct = (used / daily_limit * 100) if daily_limit > 0 else 0
+
+        if pct >= 100:
+            return (
+                f"BUDGET EXCEEDED: {used:,} / {daily_limit:,} weighted tokens today ({pct:.0f}%). "
+                f"Consider pausing non-urgent tasks."
+            )
+        elif pct >= 80:
+            return (
+                f"Budget warning: {used:,} / {daily_limit:,} weighted tokens today ({pct:.0f}%). "
+                f"Approaching daily limit."
+            )
+        return None
+
+    def get_today_usage(self) -> dict:
+        """Get today's usage summary as a dict."""
+        conn = self._get_conn()
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        row = conn.execute("""
+            SELECT COUNT(*) as calls,
+                   COALESCE(SUM(total_tokens), 0) as total,
+                   COALESCE(SUM(weighted_tokens), 0) as weighted,
+                   COALESCE(SUM(prompt_tokens), 0) as prompt
+            FROM token_usage WHERE date_key = ?
+        """, (today,)).fetchone()
+        return dict(row) if row else {"calls": 0, "total": 0, "weighted": 0, "prompt": 0}
+
     def close(self):
         if hasattr(self._local, "conn") and self._local.conn:
             self._local.conn.close()

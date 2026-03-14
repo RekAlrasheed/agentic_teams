@@ -336,6 +336,19 @@ try:
         duration_ms=${DURATION_MS}, source='agent-loop',
         task_type='session-${SESSION_COUNTER}',
     )
+    # Budget check — alert if approaching daily limit
+    warning = t.check_budget()
+    if warning:
+        print(f'[BUDGET] {warning}')
+        from pathlib import Path
+        alert_dir = Path('workspace/comms/to-founder')
+        alert_dir.mkdir(parents=True, exist_ok=True)
+        from datetime import datetime, timezone
+        ts = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
+        (alert_dir / f'{ts}-budget-alert.md').write_text(
+            f'## TOKEN BUDGET ALERT\n\n{warning}\n\n'
+            f'**Agent:** ${AGENT_NAME}\n**Model:** ${SESSION_MODEL}\n'
+        )
 except Exception:
     pass
 " 2>/dev/null || true
