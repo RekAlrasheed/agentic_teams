@@ -938,6 +938,49 @@ nav {
     color: var(--text-dim);
 }
 
+/* Markdown rendered overrides */
+.output-preview.md-rendered,
+.detail-preview.md-rendered {
+    white-space: normal;
+    color: var(--text);
+}
+.output-preview.md-rendered h1,
+.detail-preview.md-rendered h1 { font-size: 1.4em; color: var(--text-bright); margin: 0.6em 0 0.3em; border-bottom: 2px solid var(--border); padding-bottom: 4px; }
+.output-preview.md-rendered h2,
+.detail-preview.md-rendered h2 { font-size: 1.2em; color: var(--accent); margin: 0.6em 0 0.3em; }
+.output-preview.md-rendered h3,
+.detail-preview.md-rendered h3 { font-size: 1.05em; color: var(--text-bright); margin: 0.5em 0 0.2em; }
+.output-preview.md-rendered p,
+.detail-preview.md-rendered p { margin: 0.4em 0; }
+.output-preview.md-rendered ul,
+.output-preview.md-rendered ol,
+.detail-preview.md-rendered ul,
+.detail-preview.md-rendered ol { padding-left: 1.4em; margin: 0.3em 0; }
+.output-preview.md-rendered li,
+.detail-preview.md-rendered li { margin: 0.15em 0; }
+.output-preview.md-rendered strong,
+.detail-preview.md-rendered strong { color: var(--text-bright); }
+.output-preview.md-rendered em,
+.detail-preview.md-rendered em { color: var(--text-dim); }
+.output-preview.md-rendered code,
+.detail-preview.md-rendered code { background: #1a1a3a; border: 1px solid var(--border); padding: 1px 5px; border-radius: 2px; font-size: 0.9em; color: #a0e0ff; }
+.output-preview.md-rendered pre,
+.detail-preview.md-rendered pre { background: #111128; border: 2px solid var(--border); padding: 10px; overflow-x: auto; margin: 0.5em 0; }
+.output-preview.md-rendered pre code,
+.detail-preview.md-rendered pre code { background: none; border: none; padding: 0; }
+.output-preview.md-rendered blockquote,
+.detail-preview.md-rendered blockquote { border-left: 3px solid var(--accent); margin: 0.5em 0; padding-left: 10px; color: var(--text-dim); }
+.output-preview.md-rendered a,
+.detail-preview.md-rendered a { color: var(--accent); text-decoration: underline; }
+.output-preview.md-rendered hr,
+.detail-preview.md-rendered hr { border: none; border-top: 1px solid var(--border); margin: 0.8em 0; }
+.output-preview.md-rendered table,
+.detail-preview.md-rendered table { border-collapse: collapse; width: 100%; margin: 0.5em 0; font-size: 0.9em; }
+.output-preview.md-rendered th,
+.detail-preview.md-rendered th { background: #1a1a3a; color: var(--accent); padding: 6px 10px; border: 1px solid var(--border); text-align: left; }
+.output-preview.md-rendered td,
+.detail-preview.md-rendered td { padding: 5px 10px; border: 1px solid var(--border); color: var(--text); }
+
 .detail-empty {
     color: var(--text-dim);
     font-size: 16px;

@@ -433,9 +433,10 @@ const AgentDetail = {
     async viewTask(filename) {
         const result = await CrewHQ.getAgentTaskContent(this.currentAgent, filename);
         if (result.error) { showToast(result.error, true); return; }
+        const { html, rendered } = renderMarkdown(result.content, filename);
         showModal(`
             <div class="modal-title">TASK: ${escapeHtml(filename)}</div>
-            <div class="detail-preview" style="max-height:400px;overflow-y:auto;">${escapeHtml(result.content)}</div>
+            <div class="detail-preview${rendered ? ' md-rendered' : ''}" style="max-height:400px;overflow-y:auto;">${html}</div>
             <div class="modal-actions">
                 <button class="pixel-btn secondary" onclick="closeModal()">CLOSE</button>
                 <button class="pixel-btn danger" onclick="AgentDetail.cancelTask('${escapeHtml(filename)}');closeModal();">CANCEL TASK</button>
@@ -496,10 +497,11 @@ const AgentDetail = {
         const viewer = document.getElementById('detail-output-viewer');
         if (!viewer) return;
         if (result.error) { showToast(result.error, true); return; }
+        const { html, rendered } = renderMarkdown(result.content, filename);
         viewer.innerHTML = `
             <div class="detail-section" style="margin-top:12px;">
                 <div class="detail-label">${escapeHtml(filename)}</div>
-                <div class="detail-preview" style="max-height:400px;overflow-y:auto;">${escapeHtml(result.content)}</div>
+                <div class="detail-preview${rendered ? ' md-rendered' : ''}" style="max-height:400px;overflow-y:auto;">${html}</div>
             </div>`;
     },
 
