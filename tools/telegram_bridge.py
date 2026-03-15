@@ -448,7 +448,7 @@ class OutputWatcher(FileSystemEventHandler):
         try:
             await asyncio.sleep(2)
             rel = filepath.relative_to(OUTPUTS_DIR)
-            agent_names = {"creative": "Muse", "technical": "Arch", "admin": "Sage", "pm": "Navi"}
+            agent_names = {"creative": "Muse", "technical": "Arch", "admin": "Sage", "pm": "Navi", "ceo": "Rex"}
             agent_folder = rel.parts[0] if rel.parts else "unknown"
             agent = agent_names.get(agent_folder, agent_folder)
             size_kb = filepath.stat().st_size / 1024

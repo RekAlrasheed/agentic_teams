@@ -179,7 +179,7 @@ def generate_agent_quick_ref(entries: list[dict]) -> str:
             agent_files[agent].append(f"- {entry['path']} — {entry['summary'][:80]}")
 
     sections = []
-    for agent in ["PM (Navi)", "Creative (Muse)", "Technical (Arch)", "Admin (Sage)"]:
+    for agent in ["PM (Navi)", "Creative (Muse)", "Technical (Arch)", "Admin (Sage)", "CEO (Rex)"]:
         if agent in agent_files:
             sections.append(f"### For {agent}\n" + "\n".join(agent_files[agent][:15]))
 

@@ -51,7 +51,7 @@ MAX_FAILURES=10             # max consecutive failures before stopping an agent
 LOG_DIR="workspace/logs"
 ENABLE_BRIDGE=true
 ENABLE_DASHBOARD=true
-AGENTS_TO_RUN="pm,creative,technical,admin"
+AGENTS_TO_RUN="pm,creative,technical,admin,ceo"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do

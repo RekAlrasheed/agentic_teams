@@ -106,6 +106,7 @@ const AGENT_CFG = {
   creative:  { sprite:'char_1', name:'Muse',  color:'#ff8c42', sCol:20, sRow:16, dCol:20, dRow:14 },
   technical: { sprite:'char_2', name:'Arch',  color:'#a855f7', sCol:15, sRow:20, dCol:15, dRow:18 },
   admin:     { sprite:'char_3', name:'Sage',  color:'#22c55e', sCol:20, sRow:20, dCol:20, dRow:18 },
+  ceo:       { sprite:'char_4', name:'Rex',   color:'#d4a853', sCol:27, sRow:5,  dCol:27, dRow:3  },
 };
 
 /* ── Tile helpers ───────────────────────────────────────────── */
