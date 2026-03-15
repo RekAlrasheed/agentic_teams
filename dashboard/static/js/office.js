@@ -296,6 +296,18 @@ function drawOverlays() {
   ctx.fillText('NAVAIA', logoX + logoW / 2, logoY + logoH / 2 + 5);
   ctx.textAlign = 'left';
 
+  // CEO office — gold "CEO" plaque on back wall (row 1, cols 25-27)
+  const ceoX = 25 * T, ceoY = 1 * T;
+  const ceoW = 3 * T, ceoH = T;
+  ctx.fillStyle = '#1a1510ee';
+  ctx.fillRect(ceoX + 4, ceoY + 4, ceoW - 8, ceoH - 8);
+  ctx.strokeStyle = '#d4a853'; ctx.lineWidth = 2;
+  ctx.strokeRect(ceoX + 4, ceoY + 4, ceoW - 8, ceoH - 8);
+  ctx.font = '11px "Press Start 2P"'; ctx.fillStyle = '#d4a853';
+  ctx.textAlign = 'center';
+  ctx.fillText('CEO', ceoX + ceoW / 2, ceoY + ceoH / 2 + 4);
+  ctx.textAlign = 'left';
+
   // Branding
   ctx.font = '10px "Press Start 2P"'; ctx.fillStyle = '#4a9eff88';
   ctx.textAlign = 'center';

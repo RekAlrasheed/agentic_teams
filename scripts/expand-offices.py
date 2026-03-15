@@ -157,6 +157,67 @@ add("ASSET_133_0_0", 10, 18)            # white plant 1
 add("ASSET_71", 4, 12)                  # blue book (desk 1)
 add("ASSET_72", 9, 16)                  # red book (desk 4)
 
+# ═══════════════════════════════════════════════════════════════════════════
+# CEO OFFICE — to the RIGHT of the meeting room (cols 23-30, rows 1-8)
+# Accessible ONLY through the meeting room's right wall
+# Fancy carpet floor (tile 1), Navaia branding, executive furniture
+# ═══════════════════════════════════════════════════════════════════════════
+
+CEO_LEFT = 22
+CEO_RIGHT = 29
+CEO_TOP = 1
+CEO_BOT = 8
+
+for r in range(CEO_TOP, CEO_BOT + 1):
+    for c in range(CEO_LEFT, CEO_RIGHT + 1):
+        idx = r * NEW_COLS + c
+        if r == CEO_TOP or r == CEO_BOT or c == CEO_LEFT or c == CEO_RIGHT:
+            new_tiles[idx] = 0   # wall
+        else:
+            new_tiles[idx] = 1   # carpet floor (lounge-style)
+
+# Open doorway: meeting room right wall (col 21) + CEO left wall (col 22)
+# Door at rows 4-5 (middle of the room)
+for r in [4, 5]:
+    new_tiles[r * NEW_COLS + 21] = 2   # open meeting room right wall
+    new_tiles[r * NEW_COLS + 22] = 1   # open CEO left wall (carpet)
+
+# === CEO OFFICE FURNITURE ===
+
+# Executive desk — large wood table centered (cols 24-25, row 3)
+add("ASSET_27_A", 24, 3)              # TABLE_WOOD_LG (2x4) — big executive desk
+
+# Executive rotating chair (behind desk, facing forward)
+add("ASSET_35", 25, 5)                # CHAIR_ROTATING_FRONT
+
+# Full computer with coffee on the desk
+add("ASSET_92", 24, 3)                # FULL_COMPUTER_COFFEE_ON (2x2)
+
+# Guest chairs (in front of desk, facing back toward desk)
+add("ASSET_38", 24, 7)                # CHAIR_CUSHIONED_BACK (guest 1)
+add("ASSET_38", 26, 7)                # CHAIR_CUSHIONED_BACK (guest 2)
+
+# Tall bookshelves on the right wall
+add("ASSET_27_B_A_B_A", 28, 2)        # FULL_BOOKSHELF_TALL
+add("ASSET_27_B_A_B_A", 28, 4)        # FULL_BOOKSHELF_TALL
+add("ASSET_27_B_A_A", 28, 6)          # BOOKSHELF_TALL
+
+# Paintings on back wall (row 1)
+add("ASSET_102", 25, 1)               # PAINTING_LANDSCAPE_2 (behind desk)
+
+# Wall clock
+add("ASSET_84", 23, 1)                # CLOCK_WALL_COLOR
+
+# Plants in corners
+add("ASSET_141", 23, 2)               # WHITE_PLANT_3 (top-left corner)
+add("ASSET_132", 23, 7)               # PLANT_1 (bottom-left corner)
+
+# Coffee mug on desk
+add("ASSET_51", 26, 4)                # COFFEE_MUG
+
+# Text frame on left wall
+add("ASSET_106", 23, 4)               # TEXT_FRAME (motivational)
+
 # Save
 new_layout = {
     "version": 1,
