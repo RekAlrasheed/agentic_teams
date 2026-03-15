@@ -88,6 +88,26 @@ BACKOFF_DELAY=0
 
 mkdir -p "$FAILED_DIR"
 
+# ── Generate MCP config for this agent ────────────────────────────────────────
+
+MCP_CONFIG="/tmp/navaia-${AGENT_NAME}-mcp.json"
+MCP_TEMPLATE="${REPO_ROOT}/tools/agent-mcp.json.template"
+if [ -f "$MCP_TEMPLATE" ]; then
+    sed "s|REPO_ROOT_PLACEHOLDER|${REPO_ROOT}|g" "$MCP_TEMPLATE" > "$MCP_CONFIG"
+    echo "[$DISPLAY_NAME] MCP config generated: $MCP_CONFIG"
+else
+    MCP_CONFIG=""
+    echo "[$DISPLAY_NAME] No MCP template found, running without MCP"
+fi
+
+# ── PM-specific: Load Health Check ────────────────────────────────────────────
+
+if [ "$AGENT_NAME" = "pm" ]; then
+    source "$SCRIPT_DIR/health-check.sh"
+    HEALTH_CHECK_INTERVAL=${HEALTH_CHECK_INTERVAL:-5}  # run every N loop cycles
+    HEALTH_CHECK_COUNTER=0
+fi
+
 # ── PM-specific: Start Telegram Bridge ────────────────────────────────────────
 
 BRIDGE_PID=""
@@ -109,6 +129,7 @@ cleanup() {
     echo ""
     echo "[$DISPLAY_NAME] Shutting down..."
     rm -f "/tmp/navaia-${AGENT_NAME}-working"
+    rm -f "/tmp/navaia-${AGENT_NAME}-mcp.json"
     if [ -n "$BRIDGE_PID" ] && kill -0 "$BRIDGE_PID" 2>/dev/null; then
         kill "$BRIDGE_PID" 2>/dev/null || true
         wait "$BRIDGE_PID" 2>/dev/null || true
@@ -189,11 +210,17 @@ PROMPT
 You are the ${DISPLAY_NAME} of Navaia's AI Workforce.
 
 Read ${AGENT_CLAUDE_MD} for your full role and instructions.
-Read knowledge/INDEX.md to understand available company files.
 
 YOUR TASK FOLDER: ${TASK_DIR}/
 Check it for task files. Execute each task according to your skills.
 Save outputs to workspace/outputs/${AGENT_NAME}/.
+
+MCP TOOLS AVAILABLE (use instead of manual file I/O):
+- filesystem: read/write workspace/ and knowledge/ files
+- sqlite-tasks: query workspace/tasks.db for task status
+- sqlite-tokens: query workspace/token_usage.db for budget
+- trello: manage Trello cards directly
+- github: manage repos, PRs, issues
 
 TASK COMPLEXITY PROTOCOL:
 Before starting any task, assess its complexity:
@@ -289,6 +316,16 @@ while [ "$SESSION_COUNTER" -lt "$MAX_RESTARTS" ]; do
         break
     fi
 
+    # PM-only: Periodic health check of all agents
+    if [ "$AGENT_NAME" = "pm" ]; then
+        HEALTH_CHECK_COUNTER=$((HEALTH_CHECK_COUNTER + 1))
+        if [ "$HEALTH_CHECK_COUNTER" -ge "$HEALTH_CHECK_INTERVAL" ]; then
+            echo "[$DISPLAY_NAME] Running agent health check..."
+            run_health_check
+            HEALTH_CHECK_COUNTER=0
+        fi
+    fi
+
     # Check for work
     TASK_COUNT=$(count_tasks "$TASK_DIR")
     echo "[$DISPLAY_NAME] $(date '+%H:%M:%S') — Checking $TASK_DIR ... found $TASK_COUNT task(s)"
@@ -332,7 +369,11 @@ while [ "$SESSION_COUNTER" -lt "$MAX_RESTARTS" ]; do
     CLAUDE_STDERR=$(mktemp)
     CLAUDE_STDOUT=$(mktemp)
     START_TIME=$(date +%s)
-    claude --dangerously-skip-permissions --model "$SESSION_MODEL" --max-turns "$SESSION_MAX_TURNS" "$PROMPT" >"$CLAUDE_STDOUT" 2>"$CLAUDE_STDERR" || CLAUDE_EXIT=$?
+    MCP_ARGS=()
+    if [ -n "$MCP_CONFIG" ] && [ -f "$MCP_CONFIG" ]; then
+        MCP_ARGS=(--mcp-config "$MCP_CONFIG")
+    fi
+    claude --dangerously-skip-permissions --model "$SESSION_MODEL" --max-turns "$SESSION_MAX_TURNS" "${MCP_ARGS[@]}" "$PROMPT" >"$CLAUDE_STDOUT" 2>"$CLAUDE_STDERR" || CLAUDE_EXIT=$?
     END_TIME=$(date +%s)
     DURATION_MS=$(( (END_TIME - START_TIME) * 1000 ))
     rm -f "/tmp/navaia-${AGENT_NAME}-working"

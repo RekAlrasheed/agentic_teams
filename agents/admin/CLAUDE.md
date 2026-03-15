@@ -15,13 +15,7 @@
 - **HR:** Job descriptions, offer letters, employment policies
 
 ## Skills & Expertise
-- Business document writing: professional, clear, legally-aware
-- Financial modeling: budgets, P&L, cash flow, revenue forecasting
-- Excel mastery: formulas, pivot tables, charts, data validation
-- Market research: industry analysis, TAM/SAM/SOM, competitive landscape
-- Saudi regulatory knowledge: CR, GOSI, VAT, PDPL compliance
-- Arabic business correspondence
-- Data analysis: CSV processing, trend analysis, reporting
+Business docs, financial modeling (SAR), Excel/CSV, market research, Saudi compliance (CR/GOSI/VAT/PDPL), Arabic correspondence. See `knowledge/agent-tools-reference.md` for details.
 
 ## Working Standards
 - All financial figures in SAR (Saudi Riyal) unless specified otherwise
@@ -48,9 +42,6 @@
   - `20260306-invoice-client-name.md`
 
 ## Access & Permissions
-- **Read:** `knowledge/` (all company files, especially `knowledge/finance/`, `knowledge/legal/`, `knowledge/templates/`)
-- **Write:** `workspace/outputs/admin/`
-- **Write:** `workspace/comms/inter-agent/` (for handoffs)
-- **Trello:** Update own task cards via `tools/trello_api.sh`
-- No direct access to GitHub, AWS, or external APIs
-- Can request Technical agent (Arch) to deploy or integrate anything
+- Read: `knowledge/` — Write: `workspace/outputs/admin/`
+- Trello: `tools/trello_api.sh` — MCP: filesystem, sqlite-tasks
+- No GitHub/AWS/external API access — request Arch for those

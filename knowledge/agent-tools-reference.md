@@ -39,10 +39,12 @@
 - `/market-research` — competitive analysis, market sizing
 
 ## Technical Agent (Arch) Skills
-- Full-stack: React/Next.js, Python/FastAPI, Node.js/Express
+- Full-stack: React/Next.js/TypeScript/Tailwind, Python/FastAPI, Node.js/Express
 - Cloud: AWS (EC2, ECS, Lambda, RDS, S3, CloudFront, Route53)
-- DevOps: Docker, GitHub Actions, Nginx
+- DevOps: Docker, Docker Compose, GitHub Actions, Nginx
 - Databases: PostgreSQL, Redis, DynamoDB
+- APIs: REST, GraphQL, WebSockets
+- Languages: Python, TypeScript/JavaScript, Bash
 
 ## Admin Agent (Sage) Skills
 - Business documents: proposals, contracts, MOUs, NDAs, invoices

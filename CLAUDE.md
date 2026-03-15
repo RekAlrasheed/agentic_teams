@@ -112,60 +112,10 @@ Tokens cost money. Every wasted token is wasted money. The PM is responsible for
 
 ---
 
-## TRELLO INTEGRATION
+## TRELLO & TELEGRAM
 
-**Board name:** Navaia Crew
-
-### Lists (in order)
-- **Inbox** — New tasks just received
-- **Planning** — PM is breaking down the task
-- **To Do** — Ready to be picked up by an agent
-- **In Progress** — Agent actively working
-- **Review** — PM reviewing the output
-- **Done** — Completed and approved
-- **Blocked** — Waiting for Manager input
-- **Rejected** — Manager rejected, needs rework
-
-### Labels (one per agent)
-PM (blue), Creative (orange), Technical (purple), Admin (green)
-
-### Card Requirements
-Every card has: title, description, agent label, checklist of subtasks if applicable.
-
-Agents update cards by calling the Trello API via bash:
-```bash
-source tools/trello_api.sh
-```
-
----
-
-## TELEGRAM COMMUNICATION PROTOCOL
-
-### Receiving tasks from Manager
-- New tasks appear as files in `workspace/tasks/inbox/` (created by Telegram bridge)
-- Check this folder on startup and periodically
-- Each file contains the task text, timestamp, and source
-
-### Sending messages to Manager
-- Write a markdown file to `workspace/comms/to-manager/`
-- Filename format: `{YYYYMMDD-HHMMSS}-{topic}.md`
-- The Telegram bridge watches this folder and sends new files to the Manager
-- Keep messages concise — the Manager reads on mobile
-
-### Message format
-```markdown
-## [STATUS UPDATE | QUESTION | PLAN APPROVAL | BLOCKER | COMPLETED]
-
-{Your message}
-
-**Task:** {task name}
-**Agent:** {who's working on it}
-**Trello:** {card ID or link}
-```
-
-### Receiving Manager replies
-- Replies appear in `workspace/comms/from-manager/`
-- Check this folder when waiting for approval
+- **Trello:** See `knowledge/trello-guide.md` for board setup, lists, labels, and API usage.
+- **Telegram:** See `knowledge/telegram-protocol.md` for message format, sending, and receiving.
 
 ---
 
@@ -210,60 +160,8 @@ On every session start:
 
 ---
 
-## ERROR RECOVERY
+## ERROR RECOVERY & COORDINATION
 
-- If a teammate crashes or gets stuck: note failure on Trello, re-assign task, notify Manager only if it fails twice
-- If Trello API fails: log the error and continue — don't block real work
-- If Telegram bridge is down: write to `workspace/comms/to-manager/` anyway — messages send when bridge recovers
-
-## FILE HANDOFFS BETWEEN AGENTS
-
-1. Save file to `workspace/comms/inter-agent/{from}-to-{to}-{topic}.md`
-2. Write a task file to the receiving agent's folder referencing the handoff file
-3. The receiving agent reads the file and proceeds
-
-## BATCHING
-
-Status updates to Telegram should be batched — don't send 10 messages for 10 small updates. Batch into one summary every 10-15 minutes during active work.
-
----
-
-## ECC CAPABILITIES (Everything Claude Code)
-
-ECC is installed globally at `~/.claude/`. It adds development capabilities on top of our agent system.
-
-### Available Slash Commands
-- `/plan` — Structured implementation planning with risk assessment
-- `/tdd` — Test-driven development workflow (tests first, then code)
-- `/orchestrate` — Chain agents: planner → tdd → code-review → security
-- `/code-review` — Code quality assessment
-- `/security-scan` — Security vulnerability scanning (AgentShield)
-- `/verify` — Verification workflow for changes
-- `/quality-gate` — Post-edit quality checks
-- `/learn` — Extract reusable patterns from current session
-- `/evolve` — Evolve learned patterns into skills
-- `/eval` — Run evaluation framework
-- `/model-route` — Smart model routing by task complexity
-- `/checkpoint` — Save session state
-- `/instinct-status` — Check learning system status
-
-### Available Subagents (via Agent tool)
-planner, architect, tdd-guide, code-reviewer, security-reviewer, build-error-resolver, python-reviewer, doc-updater
-
-### Installed Skills (20)
-Coding standards, Python patterns/testing, API design, backend patterns, security review/scan, TDD workflow, deployment patterns, Docker patterns, continuous learning, verification loop, agentic engineering, autonomous loops, cost-aware LLM pipeline, content engine, article writing, investor materials, market research
-
-### MCP Servers (External Tool Access)
-Configured in `.mcp.json` — agents can use these tools natively:
-- **filesystem** — scoped read/write access to workspace/ and knowledge/
-- **github** — manage repos, issues, PRs (for Arch)
-- **mcp-image** — AI image generation via Gemini (for Muse)
-- **brave-search** — web search for research (disabled until BRAVE_API_KEY added)
-
-### How to Use
-- These complement (not replace) your agent behavior rules above
-- Arch should use `/tdd` and `/code-review` for all code tasks
-- Muse can use content-engine and article-writing skills
-- Sage can use investor-materials and market-research skills
-- Navi can use `/plan` and `/orchestrate` for complex task breakdowns
-- Use `/learn` at end of productive sessions to capture patterns
+- Teammate crashes: note on Trello, re-assign, notify Manager only if fails twice. Trello API down: log and continue. Telegram down: write to `workspace/comms/to-manager/` anyway.
+- Agent handoffs: save to `workspace/comms/inter-agent/{from}-to-{to}-{topic}.md`, write task file referencing it.
+- Batch Telegram status updates every 10-15 min during active work.

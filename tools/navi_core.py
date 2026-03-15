@@ -76,6 +76,23 @@ TRELLO_BOARD_ID = os.getenv("TRELLO_BOARD_ID", "")
 _TRIM_THRESHOLD = 1000
 _TRIM_TARGET = 500
 
+# TTL cache for expensive operations (pgrep, file scans)
+_cache: dict[str, tuple[float, object]] = {}
+_CACHE_TTL = 15.0  # seconds
+
+
+def _cached(key: str, fn, ttl: float = _CACHE_TTL):
+    """Return cached value if fresh, otherwise call fn() and cache result."""
+    import time
+    now = time.monotonic()
+    if key in _cache:
+        ts, val = _cache[key]
+        if now - ts < ttl:
+            return val
+    val = fn()
+    _cache[key] = (now, val)
+    return val
+
 
 # ── Conversation History (file-based, process-safe) ─────────────────────────
 
@@ -341,11 +358,22 @@ CONVERSATION:
 {conversation_history}"""
 
 
-def _build_system_prompt() -> str:
-    """Build a lean system prompt — fast to generate, small token footprint."""
-    system_status = get_system_status()
-    recent_outputs = get_recent_outputs(3)
-    active_tasks = get_active_task_details()
+def _build_system_prompt(model: str = "sonnet") -> str:
+    """Build a model-aware system prompt — haiku gets minimal context, sonnet/opus get full.
+
+    Haiku path skips expensive status/outputs/tasks when the message is simple chat.
+    Sonnet/opus path uses TTL-cached status to avoid redundant pgrep/file scans.
+    """
+    if model == "haiku":
+        # Minimal context for simple chat — save tokens
+        system_status = ""
+        recent_outputs = ""
+        active_tasks = ""
+    else:
+        # Full cached context for sonnet/opus
+        system_status = _cached("system_status", get_system_status)
+        recent_outputs = _cached("recent_outputs", lambda: get_recent_outputs(3))
+        active_tasks = _cached("active_tasks", get_active_task_details)
 
     history = load_history(5)
     if history:
@@ -695,9 +723,9 @@ def ask_sync(message: str, source: str = "dashboard") -> dict:
     On timeout or empty response, retries once with a minimal prompt.
     """
     save_message("user", message, source)
-    system_prompt = _build_system_prompt()
-    max_turns = _detect_max_turns(message)
     model = _detect_model(message)
+    system_prompt = _build_system_prompt(model)
+    max_turns = _detect_max_turns(message)
     logger.info(f"Model routing: '{model}' for message: {message[:80]}")
 
     for attempt in range(2):
@@ -892,9 +920,9 @@ async def ask_async(message: str, source: str = "telegram") -> dict:
     On timeout or empty response, retries once with a minimal prompt.
     """
     save_message("user", message, source)
-    system_prompt = _build_system_prompt()
-    max_turns = _detect_max_turns(message)
     model = _detect_model(message)
+    system_prompt = _build_system_prompt(model)
+    max_turns = _detect_max_turns(message)
     logger.info(f"Model routing: '{model}' for message: {message[:80]}")
 
     for attempt in range(2):
