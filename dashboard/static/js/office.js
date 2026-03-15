@@ -296,8 +296,8 @@ function drawOverlays() {
   ctx.fillText('NAVAIA', logoX + logoW / 2, logoY + logoH / 2 + 5);
   ctx.textAlign = 'left';
 
-  // CEO office — gold "CEO" plaque on back wall (row 1, cols 25-27)
-  const ceoX = 25 * T, ceoY = 1 * T;
+  // CEO office — gold "CEO" plaque on back wall (row 1, cols 28-30)
+  const ceoX = 28 * T, ceoY = 1 * T;
   const ceoW = 3 * T, ceoH = T;
   ctx.fillStyle = '#1a1510ee';
   ctx.fillRect(ceoX + 4, ceoY + 4, ceoW - 8, ceoH - 8);
