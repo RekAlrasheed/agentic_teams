@@ -80,13 +80,15 @@ mkdir -p "$TASK_DIR"
 
 STOP_FILE="workspace/comms/STOP"
 FAILED_DIR="workspace/tasks/failed"
+SESSION_DIR="workspace/sessions/${AGENT_NAME}"
+SESSION_RESPONSES_DIR="${SESSION_DIR}/responses"
 MAX_RESTARTS=${MAX_RESTARTS:-200}
 MAX_TASK_RETRIES=3
 SESSION_COUNTER=0
 CONSECUTIVE_FAILURES=0
 BACKOFF_DELAY=0
 
-mkdir -p "$FAILED_DIR"
+mkdir -p "$FAILED_DIR" "$SESSION_DIR" "$SESSION_RESPONSES_DIR"
 
 # ── Generate MCP config for this agent ────────────────────────────────────────
 
@@ -167,7 +169,99 @@ has_work() {
             fi
         done
     fi
+    # Check for waiting sessions with responses ready
+    local waiting
+    waiting=$(count_waiting_sessions)
+    if [ "$waiting" -gt 0 ]; then
+        return 0
+    fi
     return 1
+}
+
+# ── Session State Management ────────────────────────────────────────────────
+
+save_session_state() {
+    local task_base="$1" session_id="$2" status="$3" signal_type="${4:-}" signal_content="${5:-}"
+    local state_file="${SESSION_DIR}/${task_base}.json"
+    local rounds=1
+    if [ -f "$state_file" ]; then
+        rounds=$(python3 -c "
+import json, sys
+try:
+    d = json.load(open('$state_file')); print(d.get('rounds',0)+1)
+except: print(1)
+" 2>/dev/null || echo "1")
+    fi
+    python3 -c "
+import json
+from datetime import datetime, timezone
+state = {
+    'session_id': '$session_id',
+    'task_base': '$task_base',
+    'agent': '$AGENT_NAME',
+    'status': '$status',
+    'signal_type': '$signal_type',
+    'signal_content': '''${signal_content//\'/\\\'}''',
+    'last_updated': datetime.now(timezone.utc).isoformat(),
+    'rounds': $rounds
+}
+with open('${SESSION_DIR}/${task_base}.json', 'w') as f:
+    json.dump(state, f, indent=2)
+" 2>/dev/null
+}
+
+parse_json_field() {
+    # Parse a field from JSON output using python3 (jq not available)
+    local json_str="$1" field="$2"
+    python3 -c "
+import json, sys
+try:
+    data = json.loads(sys.stdin.read())
+    print(data.get('$field', ''))
+except: print('')
+" <<< "$json_str"
+}
+
+detect_signal() {
+    # Detect session signals in agent output text
+    local result_text="$1"
+    if echo "$result_text" | grep -q '\[WAITING:QUESTION\]'; then
+        echo "QUESTION"
+    elif echo "$result_text" | grep -q '\[WAITING:PLAN\]'; then
+        echo "PLAN"
+    elif echo "$result_text" | grep -q '\[WAITING:BLOCKED\]'; then
+        echo "BLOCKED"
+    elif echo "$result_text" | grep -q '\[DONE\]'; then
+        echo "DONE"
+    else
+        echo "DONE"  # default: assume done if no signal
+    fi
+}
+
+count_waiting_sessions() {
+    local count=0
+    for sf in "${SESSION_DIR}"/*.json; do
+        [ -f "$sf" ] || continue
+        local status
+        status=$(python3 -c "
+import json
+try: print(json.load(open('$sf')).get('status',''))
+except: print('')
+" 2>/dev/null)
+        if [ "$status" = "waiting" ]; then
+            local task_base
+            task_base=$(python3 -c "
+import json
+try: print(json.load(open('$sf')).get('task_base',''))
+except: print('')
+" 2>/dev/null)
+            local response_file="${SESSION_RESPONSES_DIR}/${task_base}.md"
+            if [ -f "$response_file" ]; then
+                count=$((count + 1))
+            fi
+        fi
+    done
+    echo "$count"
 }
 
 # ── Build Agent Prompt ───────────────────────────────────────────────────────
@@ -192,11 +286,18 @@ TASK DISPATCHING:
 - If the Manager's task includes "JDI" (Just Do It), pass JDI through to the agent task. This means skip planning, execute immediately.
 - If the Manager's task is complex and does NOT include JDI, the agent will propose a plan before executing.
 
+RESPONSE ROUTING:
+When the Manager replies in workspace/comms/from-manager/, check if it relates to a waiting agent session:
+1. Look at workspace/sessions/{agent}/ for JSON files with status "waiting"
+2. Match the Manager's reply to the correct waiting session by task name
+3. Write the response to workspace/sessions/{agent}/responses/{task-base}.md
+4. The agent loop will automatically resume the session with full context
+
 STARTUP:
 1. Read CLAUDE.md for full instructions
 2. Check workspace/tasks/inbox/ for new tasks
 3. Check workspace/tasks/active/ for in-progress work
-4. Check workspace/comms/from-manager/ for replies
+4. Check workspace/comms/from-manager/ for replies — route to waiting sessions if applicable
 5. If ALL empty — EXIT immediately
 6. For each task: analyze it, decide which agent(s) should handle it
 7. Write agent-specific task files to dispatch work
@@ -248,6 +349,16 @@ When done:
    - Path to output file(s) in workspace/outputs/${AGENT_NAME}/
    - Any blockers or follow-up needed
    The Manager reads this on Telegram — make it complete and useful.
+
+SESSION SIGNALS (IMPORTANT):
+When you finish working on a task, end your response with exactly one of these signals:
+- [DONE] — task is fully complete
+- [WAITING:QUESTION] — you have questions for the Manager (also write them to workspace/comms/to-manager/)
+- [WAITING:PLAN] — you are proposing a plan for approval (also write it to workspace/comms/to-manager/)
+- [WAITING:BLOCKED] — you are blocked on something external (also write details to workspace/comms/to-manager/)
+
+The system will preserve your full conversation context. When the Manager responds, you will be
+resumed with their answer and can continue exactly where you left off.
 
 If no tasks in your folder — EXIT immediately to save tokens.
 NEVER ask questions in the terminal. All questions go through workspace/comms/to-manager/.
@@ -358,164 +469,258 @@ while [ "$SESSION_COUNTER" -lt "$MAX_RESTARTS" ]; do
     # Auto-detect model and max turns from task file (set by Navi)
     SESSION_MODEL=$(detect_model)
     SESSION_MAX_TURNS=$(detect_max_turns "$SESSION_MODEL")
-    echo "[$DISPLAY_NAME] Session #${SESSION_COUNTER} — ${TASK_COUNT} task(s) — Model: $SESSION_MODEL — Max turns: $SESSION_MAX_TURNS"
 
-    PROMPT=$(build_prompt)
-
-    # Launch Claude — lock file signals "WORKING" to the dashboard
-    touch "/tmp/navaia-${AGENT_NAME}-working"
-
-    CLAUDE_EXIT=0
-    CLAUDE_STDERR=$(mktemp)
-    CLAUDE_STDOUT=$(mktemp)
-    START_TIME=$(date +%s)
+    # Build MCP args
     MCP_ARGS=()
     if [ -n "$MCP_CONFIG" ] && [ -f "$MCP_CONFIG" ]; then
         MCP_ARGS=(--mcp-config "$MCP_CONFIG")
     fi
-    claude --dangerously-skip-permissions --model "$SESSION_MODEL" --max-turns "$SESSION_MAX_TURNS" "${MCP_ARGS[@]}" "$PROMPT" >"$CLAUDE_STDOUT" 2>"$CLAUDE_STDERR" || CLAUDE_EXIT=$?
-    END_TIME=$(date +%s)
-    DURATION_MS=$(( (END_TIME - START_TIME) * 1000 ))
-    rm -f "/tmp/navaia-${AGENT_NAME}-working"
 
-    # ── Token tracking ────────────────────────────────────────────────────
-    STDOUT_SIZE=$(wc -c < "$CLAUDE_STDOUT" 2>/dev/null | tr -d ' ')
-    PROMPT_SIZE=${#PROMPT}
-    python3 -c "
-import sys
-sys.path.insert(0, 'tools')
+    # ── Phase 1: Process NEW tasks ────────────────────────────────────────
+    while IFS= read -r TASK_FILE; do
+        [ -z "$TASK_FILE" ] && continue
+        TASK_BASE=$(basename "$TASK_FILE" .md)
+
+        # Skip if this task already has an active/waiting session
+        if [ -f "${SESSION_DIR}/${TASK_BASE}.json" ]; then
+            continue
+        fi
+
+        SESSION_COUNTER=$((SESSION_COUNTER + 1))
+        echo "[$DISPLAY_NAME] Session #${SESSION_COUNTER} — NEW task: $TASK_BASE — Model: $SESSION_MODEL — Max turns: $SESSION_MAX_TURNS"
+
+        PROMPT=$(build_prompt)
+        touch "/tmp/navaia-${AGENT_NAME}-working"
+
+        CLAUDE_EXIT=0
+        CLAUDE_STDERR=$(mktemp)
+        CLAUDE_STDOUT=$(mktemp)
+        START_TIME=$(date +%s)
+        claude -p --dangerously-skip-permissions \
+            --model "$SESSION_MODEL" \
+            --max-turns "$SESSION_MAX_TURNS" \
+            --output-format json \
+            "${MCP_ARGS[@]}" \
+            "$PROMPT" >"$CLAUDE_STDOUT" 2>"$CLAUDE_STDERR" || CLAUDE_EXIT=$?
+        END_TIME=$(date +%s)
+        DURATION_MS=$(( (END_TIME - START_TIME) * 1000 ))
+        rm -f "/tmp/navaia-${AGENT_NAME}-working"
+
+        # Parse JSON output for session_id and result
+        RAW_OUTPUT=$(cat "$CLAUDE_STDOUT" 2>/dev/null || true)
+        CAPTURED_SESSION_ID=$(parse_json_field "$RAW_OUTPUT" "session_id")
+        RESULT_TEXT=$(parse_json_field "$RAW_OUTPUT" "result")
+
+        # Print human-readable result
+        if [ -n "$RESULT_TEXT" ]; then
+            echo "$RESULT_TEXT"
+        else
+            echo "$RAW_OUTPUT"
+        fi
+
+        # Token tracking
+        STDOUT_SIZE=$(wc -c < "$CLAUDE_STDOUT" 2>/dev/null | tr -d ' ')
+        PROMPT_SIZE=${#PROMPT}
+        python3 -c "
+import sys; sys.path.insert(0, 'tools')
 try:
     from token_tracker import TokenTracker
     t = TokenTracker()
-    t.log_call(
-        agent='${AGENT_NAME}', model='${SESSION_MODEL}',
+    t.log_call(agent='${AGENT_NAME}', model='${SESSION_MODEL}',
         input_text='x' * ${PROMPT_SIZE}, output_text='x' * ${STDOUT_SIZE:-0},
-        prompt_text='x' * ${PROMPT_SIZE},
-        duration_ms=${DURATION_MS}, source='agent-loop',
-        task_type='session-${SESSION_COUNTER}',
-    )
-    # Budget check — alert if approaching daily limit
-    warning = t.check_budget()
-    if warning:
-        print(f'[BUDGET] {warning}')
-        from pathlib import Path
-        alert_dir = Path('workspace/comms/to-manager')
-        alert_dir.mkdir(parents=True, exist_ok=True)
-        from datetime import datetime, timezone
+        prompt_text='x' * ${PROMPT_SIZE}, duration_ms=${DURATION_MS},
+        source='agent-loop', task_type='$TASK_BASE')
+    w = t.check_budget()
+    if w:
+        print(f'[BUDGET] {w}')
+        from pathlib import Path; from datetime import datetime, timezone
+        d = Path('workspace/comms/to-manager'); d.mkdir(parents=True, exist_ok=True)
         ts = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
-        (alert_dir / f'{ts}-budget-alert.md').write_text(
-            f'## TOKEN BUDGET ALERT\n\n{warning}\n\n'
-            f'**Agent:** ${AGENT_NAME}\n**Model:** ${SESSION_MODEL}\n'
-        )
-except Exception:
-    pass
+        (d / f'{ts}-budget-alert.md').write_text(f'## TOKEN BUDGET ALERT\n\n{w}\n\n**Agent:** ${AGENT_NAME}\n**Model:** ${SESSION_MODEL}\n')
+except: pass
 " 2>/dev/null || true
-    cat "$CLAUDE_STDOUT" 2>/dev/null || true
-    rm -f "$CLAUDE_STDOUT"
+        rm -f "$CLAUDE_STDOUT"
 
-    # ── Rate limit detection and backoff ──────────────────────────────────
-    STDERR_CONTENT=""
-    if [ -f "$CLAUDE_STDERR" ]; then
-        STDERR_CONTENT=$(cat "$CLAUDE_STDERR" 2>/dev/null || true)
-        rm -f "$CLAUDE_STDERR"
-    fi
+        # Handle errors
+        STDERR_CONTENT=""
+        [ -f "$CLAUDE_STDERR" ] && { STDERR_CONTENT=$(cat "$CLAUDE_STDERR" 2>/dev/null || true); rm -f "$CLAUDE_STDERR"; }
 
-    if echo "$STDERR_CONTENT" | grep -qi "rate.limit\|429\|too many requests\|overloaded\|capacity"; then
-        CONSECUTIVE_FAILURES=$((CONSECUTIVE_FAILURES + 1))
-        # Exponential backoff: 30s, 60s, 120s, 240s, capped at 300s
-        BACKOFF_DELAY=$((30 * (2 ** (CONSECUTIVE_FAILURES - 1))))
-        if [ "$BACKOFF_DELAY" -gt 300 ]; then
-            BACKOFF_DELAY=300
-        fi
-        echo "[$DISPLAY_NAME] Rate limited (attempt $CONSECUTIVE_FAILURES). Backing off ${BACKOFF_DELAY}s..."
-        # Notify Manager if repeated
-        if [ "$CONSECUTIVE_FAILURES" -ge 3 ]; then
-            mkdir -p workspace/comms/to-manager
-            cat > "workspace/comms/to-manager/$(date '+%Y%m%d-%H%M%S')-rate-limit.md" <<RATELIMIT
-## RATE LIMIT WARNING
-
-**Agent:** $DISPLAY_NAME
-**Consecutive rate limits:** $CONSECUTIVE_FAILURES
-**Backing off:** ${BACKOFF_DELAY}s
-
-Will resume automatically after backoff.
-RATELIMIT
-        fi
-
-        # ── Dead letter queue: move tasks to failed/ after max retries ──
-        if [ "$CONSECUTIVE_FAILURES" -ge "$MAX_TASK_RETRIES" ]; then
-            echo "[$DISPLAY_NAME] Max retries ($MAX_TASK_RETRIES) reached. Moving tasks to failed/..."
-            while IFS= read -r task_file; do
-                base_name=$(basename "$task_file")
-                failed_file="${FAILED_DIR}/${AGENT_NAME}-${base_name}"
-                # Append error metadata to the task file before moving
-                {
-                    echo ""
-                    echo "---"
-                    echo "## FAILURE LOG"
-                    echo "**Agent:** $DISPLAY_NAME"
-                    echo "**Failed at:** $(date '+%Y-%m-%d %H:%M:%S')"
-                    echo "**Attempts:** $CONSECUTIVE_FAILURES"
-                    echo "**Error:** Rate limited / API overloaded"
-                    echo "**stderr:** ${STDERR_CONTENT:0:500}"
-                } >> "$task_file"
-                mv "$task_file" "$failed_file"
-                echo "[$DISPLAY_NAME] Moved to dead letter: $base_name"
-            done < <(find "$TASK_DIR" -maxdepth 1 -type f ! -name '.gitkeep' 2>/dev/null)
-            # Notify Manager
-            mkdir -p workspace/comms/to-manager
-            cat > "workspace/comms/to-manager/$(date '+%Y%m%d-%H%M%S')-task-failed.md" <<TASKFAIL
-## TASK FAILURE
-
-**Agent:** $DISPLAY_NAME
-**Status:** Tasks moved to dead letter queue after $CONSECUTIVE_FAILURES failed attempts.
-**Reason:** Repeated rate limits / API errors.
-**Location:** workspace/tasks/failed/
-
-To retry: move the task file back to workspace/tasks/${AGENT_NAME}/
-TASKFAIL
+        if echo "$STDERR_CONTENT" | grep -qi "rate.limit\|429\|too many requests\|overloaded\|capacity"; then
+            CONSECUTIVE_FAILURES=$((CONSECUTIVE_FAILURES + 1))
+            BACKOFF_DELAY=$((30 * (2 ** (CONSECUTIVE_FAILURES - 1))))
+            [ "$BACKOFF_DELAY" -gt 300 ] && BACKOFF_DELAY=300
+            echo "[$DISPLAY_NAME] Rate limited (attempt $CONSECUTIVE_FAILURES). Backing off ${BACKOFF_DELAY}s..."
+            if [ "$CONSECUTIVE_FAILURES" -ge 3 ]; then
+                mkdir -p workspace/comms/to-manager
+                echo -e "## RATE LIMIT WARNING\n\n**Agent:** $DISPLAY_NAME\n**Attempts:** $CONSECUTIVE_FAILURES\n**Backing off:** ${BACKOFF_DELAY}s" \
+                    > "workspace/comms/to-manager/$(date '+%Y%m%d-%H%M%S')-rate-limit.md"
+            fi
+            if [ "$CONSECUTIVE_FAILURES" -ge "$MAX_TASK_RETRIES" ]; then
+                echo "[$DISPLAY_NAME] Max retries. Moving task to failed/..."
+                { echo -e "\n---\n## FAILURE LOG\n**Agent:** $DISPLAY_NAME\n**Failed at:** $(date)\n**Error:** Rate limited"; } >> "$TASK_FILE"
+                mv "$TASK_FILE" "${FAILED_DIR}/${AGENT_NAME}-$(basename "$TASK_FILE")"
+                CONSECUTIVE_FAILURES=0
+            fi
+            sleep "$BACKOFF_DELAY"
+            continue
+        elif [ "$CLAUDE_EXIT" -ne 0 ] && [ -n "$STDERR_CONTENT" ]; then
+            CONSECUTIVE_FAILURES=$((CONSECUTIVE_FAILURES + 1))
+            BACKOFF_DELAY=$((10 * CONSECUTIVE_FAILURES))
+            [ "$BACKOFF_DELAY" -gt 120 ] && BACKOFF_DELAY=120
+            echo "[$DISPLAY_NAME] Claude exited $CLAUDE_EXIT. stderr: ${STDERR_CONTENT:0:200}. Waiting ${BACKOFF_DELAY}s..."
+            if [ "$CONSECUTIVE_FAILURES" -ge "$MAX_TASK_RETRIES" ]; then
+                { echo -e "\n---\n## FAILURE LOG\n**Agent:** $DISPLAY_NAME\n**Exit:** $CLAUDE_EXIT\n**stderr:** ${STDERR_CONTENT:0:500}"; } >> "$TASK_FILE"
+                mv "$TASK_FILE" "${FAILED_DIR}/${AGENT_NAME}-$(basename "$TASK_FILE")"
+                CONSECUTIVE_FAILURES=0
+            fi
+            sleep "$BACKOFF_DELAY"
+            continue
+        else
             CONSECUTIVE_FAILURES=0
+            BACKOFF_DELAY=0
         fi
 
-        sleep "$BACKOFF_DELAY"
-        continue
-    elif [ "$CLAUDE_EXIT" -ne 0 ] && [ -n "$STDERR_CONTENT" ]; then
-        # Non-rate-limit error — log but don't backoff as aggressively
-        CONSECUTIVE_FAILURES=$((CONSECUTIVE_FAILURES + 1))
-        BACKOFF_DELAY=$((10 * CONSECUTIVE_FAILURES))
-        if [ "$BACKOFF_DELAY" -gt 120 ]; then
-            BACKOFF_DELAY=120
-        fi
-        echo "[$DISPLAY_NAME] Claude exited with code $CLAUDE_EXIT. Waiting ${BACKOFF_DELAY}s..."
-        echo "[$DISPLAY_NAME] stderr: ${STDERR_CONTENT:0:200}"
+        # Detect signal from agent output
+        SIGNAL=$(detect_signal "$RESULT_TEXT")
+        echo "[$DISPLAY_NAME] Signal: [$SIGNAL] | Session: ${CAPTURED_SESSION_ID:0:20}..."
 
-        # Dead letter queue for non-rate-limit errors too
-        if [ "$CONSECUTIVE_FAILURES" -ge "$MAX_TASK_RETRIES" ]; then
-            echo "[$DISPLAY_NAME] Max retries reached. Moving tasks to failed/..."
-            while IFS= read -r task_file; do
-                base_name=$(basename "$task_file")
-                {
-                    echo ""
-                    echo "---"
-                    echo "## FAILURE LOG"
-                    echo "**Agent:** $DISPLAY_NAME"
-                    echo "**Failed at:** $(date '+%Y-%m-%d %H:%M:%S')"
-                    echo "**Attempts:** $CONSECUTIVE_FAILURES"
-                    echo "**Exit code:** $CLAUDE_EXIT"
-                    echo "**stderr:** ${STDERR_CONTENT:0:500}"
-                } >> "$task_file"
-                mv "$task_file" "${FAILED_DIR}/${AGENT_NAME}-${base_name}"
-            done < <(find "$TASK_DIR" -maxdepth 1 -type f ! -name '.gitkeep' 2>/dev/null)
-            CONSECUTIVE_FAILURES=0
+        if [ "$SIGNAL" = "DONE" ] || [ -z "$CAPTURED_SESSION_ID" ]; then
+            # Task complete — move to done
+            mv "$TASK_FILE" "workspace/tasks/done/$(basename "$TASK_FILE")" 2>/dev/null || true
+            rm -f "${SESSION_DIR}/${TASK_BASE}.json" 2>/dev/null || true
+            echo "[$DISPLAY_NAME] Task complete: $TASK_BASE"
+        else
+            # Agent is waiting — save session state for later resume
+            save_session_state "$TASK_BASE" "$CAPTURED_SESSION_ID" "waiting" "$SIGNAL" ""
+            echo "[$DISPLAY_NAME] Session paused ($SIGNAL). Waiting for Manager response."
         fi
 
-        sleep "$BACKOFF_DELAY"
-        continue
-    else
-        # Success — reset failure counter
-        CONSECUTIVE_FAILURES=0
-        BACKOFF_DELAY=0
-    fi
+    done < <(find "$TASK_DIR" -maxdepth 1 -type f ! -name '.gitkeep' 2>/dev/null | sort)
+
+    # ── Phase 2: Resume WAITING sessions with responses ──────────────────
+    for SESSION_STATE_FILE in "${SESSION_DIR}"/*.json; do
+        [ -f "$SESSION_STATE_FILE" ] || continue
+
+        SESSION_STATUS=$(python3 -c "
+import json
+try: print(json.load(open('$SESSION_STATE_FILE')).get('status',''))
+except: print('')
+" 2>/dev/null)
+        [ "$SESSION_STATUS" = "waiting" ] || continue
+
+        WAITING_TASK_BASE=$(python3 -c "
+import json
+try: print(json.load(open('$SESSION_STATE_FILE')).get('task_base',''))
+except: print('')
+" 2>/dev/null)
+        RESUME_SESSION_ID=$(python3 -c "
+import json
+try: print(json.load(open('$SESSION_STATE_FILE')).get('session_id',''))
+except: print('')
+" 2>/dev/null)
+
+        RESPONSE_FILE="${SESSION_RESPONSES_DIR}/${WAITING_TASK_BASE}.md"
+        [ -f "$RESPONSE_FILE" ] || continue
+
+        # Response found — resume the session!
+        RESPONSE_TEXT=$(cat "$RESPONSE_FILE")
+        echo "[$DISPLAY_NAME] Resuming session for: $WAITING_TASK_BASE (session: ${RESUME_SESSION_ID:0:20}...)"
+
+        save_session_state "$WAITING_TASK_BASE" "$RESUME_SESSION_ID" "working" "" ""
+        touch "/tmp/navaia-${AGENT_NAME}-working"
+
+        CLAUDE_EXIT=0
+        CLAUDE_STDERR=$(mktemp)
+        CLAUDE_STDOUT=$(mktemp)
+        START_TIME=$(date +%s)
+        claude -p --dangerously-skip-permissions \
+            --model "$SESSION_MODEL" \
+            --max-turns "$SESSION_MAX_TURNS" \
+            --output-format json \
+            --resume "$RESUME_SESSION_ID" \
+            "${MCP_ARGS[@]}" \
+            "Manager's response: $RESPONSE_TEXT" >"$CLAUDE_STDOUT" 2>"$CLAUDE_STDERR" || CLAUDE_EXIT=$?
+        END_TIME=$(date +%s)
+        rm -f "/tmp/navaia-${AGENT_NAME}-working"
+
+        # Consume the response file
+        rm -f "$RESPONSE_FILE"
+
+        RAW_OUTPUT=$(cat "$CLAUDE_STDOUT" 2>/dev/null || true)
+        RESULT_TEXT=$(parse_json_field "$RAW_OUTPUT" "result")
+        NEW_SESSION_ID=$(parse_json_field "$RAW_OUTPUT" "session_id")
+        [ -n "$RESULT_TEXT" ] && echo "$RESULT_TEXT" || echo "$RAW_OUTPUT"
+
+        # Token tracking for resumed session
+        STDOUT_SIZE=$(wc -c < "$CLAUDE_STDOUT" 2>/dev/null | tr -d ' ')
+        RESUME_PROMPT_SIZE=${#RESPONSE_TEXT}
+        DURATION_MS=$(( (END_TIME - START_TIME) * 1000 ))
+        python3 -c "
+import sys; sys.path.insert(0, 'tools')
+try:
+    from token_tracker import TokenTracker
+    t = TokenTracker()
+    t.log_call(agent='${AGENT_NAME}', model='${SESSION_MODEL}',
+        input_text='x' * ${RESUME_PROMPT_SIZE}, output_text='x' * ${STDOUT_SIZE:-0},
+        prompt_text='x' * ${RESUME_PROMPT_SIZE}, duration_ms=${DURATION_MS},
+        source='agent-loop-resume', task_type='$WAITING_TASK_BASE')
+except: pass
+" 2>/dev/null || true
+        rm -f "$CLAUDE_STDOUT" "$CLAUDE_STDERR"
+
+        # Use new session_id if it changed, otherwise keep the original
+        [ -n "$NEW_SESSION_ID" ] && RESUME_SESSION_ID="$NEW_SESSION_ID"
+
+        # Detect signal from resumed output
+        SIGNAL=$(detect_signal "$RESULT_TEXT")
+        echo "[$DISPLAY_NAME] Resume signal: [$SIGNAL]"
+
+        if [ "$SIGNAL" = "DONE" ]; then
+            # Find and move the original task file to done
+            ORIG_TASK="${TASK_DIR}/${WAITING_TASK_BASE}.md"
+            [ -f "$ORIG_TASK" ] && mv "$ORIG_TASK" "workspace/tasks/done/$(basename "$ORIG_TASK")" 2>/dev/null || true
+            rm -f "$SESSION_STATE_FILE"
+            echo "[$DISPLAY_NAME] Resumed task complete: $WAITING_TASK_BASE"
+        else
+            # Still waiting — update session state for another round
+            save_session_state "$WAITING_TASK_BASE" "$RESUME_SESSION_ID" "waiting" "$SIGNAL" ""
+            echo "[$DISPLAY_NAME] Session paused again ($SIGNAL). Waiting for Manager response."
+        fi
+    done
+
+    # ── Session timeout check ─────────────────────────────────────────────
+    for SESSION_STATE_FILE in "${SESSION_DIR}"/*.json; do
+        [ -f "$SESSION_STATE_FILE" ] || continue
+        python3 -c "
+import json
+from datetime import datetime, timezone, timedelta
+try:
+    d = json.load(open('$SESSION_STATE_FILE'))
+    if d.get('status') != 'waiting': exit(0)
+    updated = datetime.fromisoformat(d['last_updated'])
+    age_hours = (datetime.now(timezone.utc) - updated).total_seconds() / 3600
+    task = d.get('task_base', 'unknown')
+    if age_hours > 72:
+        print(f'EXPIRE:{task}')
+    elif age_hours > 24:
+        print(f'REMIND:{task}')
+except: pass
+" 2>/dev/null | while read -r line; do
+            action="${line%%:*}"
+            task="${line#*:}"
+            if [ "$action" = "EXPIRE" ]; then
+                echo "[$DISPLAY_NAME] Session expired (>72h): $task"
+                ORIG_TASK="${TASK_DIR}/${task}.md"
+                [ -f "$ORIG_TASK" ] && mv "$ORIG_TASK" "${FAILED_DIR}/${AGENT_NAME}-${task}.md" 2>/dev/null || true
+                rm -f "$SESSION_STATE_FILE"
+            elif [ "$action" = "REMIND" ]; then
+                echo "[$DISPLAY_NAME] Session waiting >24h: $task — sending reminder"
+                mkdir -p workspace/comms/to-manager
+                echo -e "## SESSION REMINDER\n\n**Agent:** $DISPLAY_NAME\n**Task:** $task\n**Status:** Waiting for your response for over 24 hours.\n\nPlease reply or cancel the task." \
+                    > "workspace/comms/to-manager/$(date '+%Y%m%d-%H%M%S')-session-reminder.md"
+            fi
+        done
+    done
 
     echo "[$DISPLAY_NAME] Session #${SESSION_COUNTER} done. Next check in 15s..."
     sleep 15
