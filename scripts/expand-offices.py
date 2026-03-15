@@ -122,22 +122,22 @@ def add(ftype, col, row, color=None):
 # Desk 1 (upper-left): row 12-13, cols 2-4
 add("ASSET_NEW_106", 2, 12)            # desk
 add("ASSET_49", 3, 13)                  # chair
-add("ASSET_79", 2, 11)                  # monitor (on)
+add("ASSET_79", 3, 12)                  # monitor — same row as desk, 1 col right
 
 # Desk 2 (upper-right): row 12-13, cols 7-9
 add("ASSET_NEW_106", 7, 12)            # desk
 add("ASSET_49", 8, 13)                  # chair
-add("ASSET_108", 7, 11)                 # laptop (on)
+add("ASSET_108", 8, 12)                 # laptop — same row as desk, 1 col right
 
 # Desk 3 (lower-left): row 16-17, cols 2-4
 add("ASSET_NEW_106", 2, 16)            # desk
 add("ASSET_49", 3, 17)                  # chair
-add("ASSET_92", 2, 15)                  # full computer with coffee (on)
+add("ASSET_92", 3, 16)                  # full computer — same row as desk, 1 col right
 
 # Desk 4 (lower-right): row 16-17, cols 7-9
 add("ASSET_NEW_106", 7, 16)            # desk
 add("ASSET_49", 8, 17)                  # chair
-add("ASSET_79", 7, 15)                  # monitor (on)
+add("ASSET_79", 8, 16)                  # monitor — same row as desk, 1 col right
 
 # === DECORATION — slightly different from original ===
 
