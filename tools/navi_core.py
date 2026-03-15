@@ -159,6 +159,7 @@ def get_system_status() -> str:
         "creative": [TASKS_DIR / "creative"],
         "technical": [TASKS_DIR / "technical"],
         "admin": [TASKS_DIR / "admin"],
+        "ceo": [TASKS_DIR / "ceo"],
     }
     agent_states = []
     for aid, dirs in agent_task_dirs.items():
@@ -214,7 +215,7 @@ def get_recent_outputs(limit: int = 5) -> str:
     if not files:
         return "No outputs yet."
 
-    agent_names = {"creative": "Muse", "technical": "Arch", "admin": "Sage", "pm": "Navi"}
+    agent_names = {"creative": "Muse", "technical": "Arch", "admin": "Sage", "pm": "Navi", "ceo": "Rex"}
     lines = []
     for f in files[:limit]:
         rel = f.relative_to(OUTPUTS_DIR)
@@ -318,7 +319,7 @@ def trello_get_board_summary() -> str:
 
 SYSTEM_PROMPT_TEMPLATE = """You are Navaia's AI assistant chatting with the Manager (CEO).
 
-ROLE: Smart assistant managing 4 AI agents (Navi/PM, Muse/Creative, Arch/Technical, Sage/Admin).
+ROLE: Smart assistant managing 5 AI agents (Navi/PM, Muse/Creative, Arch/Technical, Sage/Admin, Rex/CEO).
 COMPANY: Navaia — AI-powered real estate tech in Riyadh, products Bilal (voice) and Baian (chat).
 
 RESPOND WITH JSON ONLY. Choose ONE format:
@@ -336,6 +337,7 @@ AGENT ROUTING — dispatch directly to the right agent:
 - Creative (Muse): content, campaigns, outreach, brand, social media, writing
 - Technical (Arch): code, bugs, deploy, infra, APIs, GitHub, architecture
 - Admin (Sage): docs, proposals, research, finance, compliance, contracts
+- CEO (Rex): agent performance reviews, daily research, cost analysis, business development, strategy
 - PM: only for coordination tasks that span multiple agents
 
 CRITICAL: When Manager asks to activate agents or assign work, create tasks DIRECTLY for each agent using "create_tasks". Do NOT create a single PM task asking PM to dispatch — route tasks directly to agents.
@@ -527,7 +529,7 @@ def create_task(title: str, description: str, agent: str = "PM", source: str = "
     # Create Trello card
     trello_card_id = ""
     if trello_enabled():
-        label_map = {"pm": "PM", "creative": "Creative", "technical": "Technical", "admin": "Admin"}
+        label_map = {"pm": "PM", "creative": "Creative", "technical": "Technical", "admin": "Admin", "ceo": "CEO"}
         label = label_map.get(agent_lower, "PM")
         list_id = _trello_get_list_id("Inbox")
         if list_id:
@@ -783,6 +785,7 @@ _AGENT_PERSONAS: dict[str, tuple[str, str, str]] = {
     "technical": ("Arch", "Technical Lead", "code, debugging, infrastructure, APIs, GitHub, deployments, security"),
     "admin": ("Sage", "Admin & Finance", "documents, proposals, research, finance, compliance, spreadsheets"),
     "pm": ("Navi", "PM & Team Lead", "task routing, team coordination, Manager communications, project management"),
+    "ceo": ("Rex", "CEO & Strategy", "agent performance, daily research, cost optimization, business development, vision alignment"),
 }
 
 _AGENT_CHAT_SYSTEM = """\
@@ -855,6 +858,7 @@ def _build_agent_system_prompt(agent_id: str) -> str:
         "creative": [TASKS_DIR / "creative"],
         "technical": [TASKS_DIR / "technical"],
         "admin": [TASKS_DIR / "admin"],
+        "ceo": [TASKS_DIR / "ceo"],
     }
     dirs = agent_dirs.get(agent_id, [])
     task_count = sum(_count_files(d) for d in dirs)

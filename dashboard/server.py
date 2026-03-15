@@ -67,6 +67,8 @@ DEFAULT_AGENTS = [
      "task_dir": "workspace/tasks/technical"},
     {"id": "admin", "name": "Sage", "role": "Admin", "model": "haiku", "color": "#22c55e",
      "task_dir": "workspace/tasks/admin"},
+    {"id": "ceo", "name": "Rex", "role": "CEO", "model": "sonnet", "color": "#d4a853",
+     "task_dir": "workspace/tasks/ceo"},
 ]
 
 
@@ -226,7 +228,7 @@ def get_trello_board():
         return {"enabled": True, "lists": [], "error": "Could not fetch board"}
 
     board = {"enabled": True, "lists": []}
-    label_colors = {"PM": "#4a9eff", "Creative": "#ff8c42", "Technical": "#a855f7", "Admin": "#22c55e"}
+    label_colors = {"PM": "#4a9eff", "Creative": "#ff8c42", "Technical": "#a855f7", "Admin": "#22c55e", "CEO": "#d4a853"}
 
     for lst in lists_data:
         cards_data = trello_api("GET", f"lists/{lst['id']}/cards")
@@ -261,7 +263,7 @@ def get_trello_board():
 # ── Output Files ─────────────────────────────────────────────────────────────
 
 def get_outputs():
-    agent_names = {"creative": "Muse", "technical": "Arch", "admin": "Sage", "pm": "Navi"}
+    agent_names = {"creative": "Muse", "technical": "Arch", "admin": "Sage", "pm": "Navi", "ceo": "Rex"}
     outputs = []
     if not OUTPUTS_DIR.exists():
         return outputs
@@ -457,7 +459,7 @@ def create_task(agent_id, title, description):
 
     # Also create Trello card if enabled
     if trello_enabled():
-        label_map = {"pm": "PM", "creative": "Creative", "technical": "Technical", "admin": "Admin"}
+        label_map = {"pm": "PM", "creative": "Creative", "technical": "Technical", "admin": "Admin", "ceo": "CEO"}
         label = label_map.get(agent_id, "PM")
         list_id = None
         lists_data = trello_api("GET", f"boards/{TRELLO_BOARD_ID}/lists")
@@ -536,7 +538,7 @@ def create_agent(agent_id, name, role, model, color):
 
 
 def delete_agent(agent_id):
-    if agent_id in ("pm", "creative", "technical", "admin"):
+    if agent_id in ("pm", "creative", "technical", "admin", "ceo"):
         return False, "Cannot delete core agents"
     agents = load_agents()
     agents = [a for a in agents if a["id"] != agent_id]

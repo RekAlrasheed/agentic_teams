@@ -15,7 +15,7 @@
 
 HEALTH_CHECK_DIR="${REPO_ROOT:-.}"
 HEALTH_STATE_DIR="/tmp/navaia-health"
-AGENTS=("creative" "technical" "admin")
+AGENTS=("creative" "technical" "admin" "ceo")
 COMMS_DIR="$HEALTH_CHECK_DIR/workspace/comms/to-manager"
 HEALTH_FAILED_DIR="$HEALTH_CHECK_DIR/workspace/tasks/failed"
 

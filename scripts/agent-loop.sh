@@ -14,7 +14,7 @@ set -uo pipefail
 AGENT_NAME="${1:-}"
 
 if [ -z "$AGENT_NAME" ]; then
-    echo "Usage: bash scripts/agent-loop.sh <pm|creative|technical|admin>"
+    echo "Usage: bash scripts/agent-loop.sh <pm|creative|technical|admin|ceo>"
     exit 1
 fi
 
@@ -68,9 +68,16 @@ case "$AGENT_NAME" in
         MODEL="haiku"
         AGENT_CLAUDE_MD="agents/admin/CLAUDE.md"
         ;;
+    ceo)
+        DISPLAY_NAME="Rex (CEO)"
+        TASK_DIR="workspace/tasks/ceo"
+        EXTRA_DIRS=""
+        MODEL="sonnet"
+        AGENT_CLAUDE_MD="agents/ceo/CLAUDE.md"
+        ;;
     *)
         echo "Unknown agent: $AGENT_NAME"
-        echo "Valid agents: pm, creative, technical, admin"
+        echo "Valid agents: pm, creative, technical, admin, ceo"
         exit 1
         ;;
 esac
@@ -278,6 +285,7 @@ To assign work to an agent, write a task file to their folder:
 - Creative (Muse): workspace/tasks/creative/{timestamp}-task.md
 - Technical (Arch): workspace/tasks/technical/{timestamp}-task.md
 - Admin (Sage): workspace/tasks/admin/{timestamp}-task.md
+- CEO (Rex): workspace/tasks/ceo/{timestamp}-task.md
 
 Each agent loop will pick up the task automatically.
 
