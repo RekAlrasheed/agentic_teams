@@ -98,10 +98,10 @@ async function modernizeFurniture() {
 
 /* ── Agent config ──────────────────────────────────────────── */
 const AGENT_CFG = {
-  pm:        { sprite:'char_0', name:'Navi',  color:'#4a9eff', sCol:3, sRow:16, dCol:3, dRow:14 },
-  creative:  { sprite:'char_1', name:'Muse',  color:'#ff8c42', sCol:8, sRow:16, dCol:8, dRow:14 },
-  technical: { sprite:'char_2', name:'Arch',  color:'#a855f7', sCol:3, sRow:20, dCol:3, dRow:18 },
-  admin:     { sprite:'char_3', name:'Sage',  color:'#22c55e', sCol:8, sRow:20, dCol:8, dRow:18 },
+  pm:        { sprite:'char_0', name:'Navi',  color:'#4a9eff', sCol:3, sRow:3, dCol:3, dRow:2 },
+  creative:  { sprite:'char_1', name:'Muse',  color:'#ff8c42', sCol:8, sRow:3, dCol:8, dRow:2 },
+  technical: { sprite:'char_2', name:'Arch',  color:'#a855f7', sCol:3, sRow:7, dCol:3, dRow:6 },
+  admin:     { sprite:'char_3', name:'Sage',  color:'#22c55e', sCol:8, sRow:7, dCol:8, dRow:6 },
 };
 
 /* ── Tile helpers ───────────────────────────────────────────── */
@@ -280,8 +280,8 @@ function drawOverlays() {
     }
   }
 
-  // Navaia logo — meeting room wall (row 1, cols 3-8)
-  const logoX = 3 * T, logoY = 1 * T;
+  // Navaia logo — meeting room wall (row 14, cols 12-17)
+  const logoX = 12 * T, logoY = 14 * T;
   const logoW = 5 * T, logoH = T;
   ctx.fillStyle = '#0a0e16dd';
   ctx.fillRect(logoX + 4, logoY + 4, logoW - 8, logoH - 8);
@@ -356,12 +356,12 @@ const ZONES = {
     weight: 0.45,
     chatChance: 0.08,
     pois: [
-      { c: 14, r: 18, sit: 'left' },   // lounge chair
-      { c: 17, r: 18, sit: 'right' },  // lounge chair
-      { c: 15, r: 19 },                // coffee table area
-      { c: 16, r: 19 },                // coffee table area
-      { c: 14, r: 20 },                // lounge area
-      { c: 17, r: 20 },                // lounge area
+      { c: 3, r: 16, sit: 'left' },   // lounge couch left
+      { c: 7, r: 16, sit: 'right' },   // lounge couch right
+      { c: 5, r: 17 },                 // coffee table area
+      { c: 4, r: 18 },                 // lounge floor
+      { c: 6, r: 18 },                 // lounge floor
+      { c: 5, r: 19 },                 // lounge floor
     ],
     chats: ['nice chair!', 'break time', 'so comfy', "how's work?"],
   },
@@ -369,12 +369,12 @@ const ZONES = {
     weight: 0.35,
     chatChance: 0.08,
     pois: [
-      { c: 14, r: 12 },  // vending machine area
-      { c: 16, r: 12 },  // counter area
-      { c: 15, r: 12 },  // near coffee machine
-      { c: 18, r: 12 },  // counter area
-      { c: 15, r: 13 },  // kitchen center
-      { c: 18, r: 13 },  // kitchen floor
+      { c: 12, r: 11 },  // near coffee machine
+      { c: 14, r: 11 },  // near microwave
+      { c: 16, r: 11 },  // counter area
+      { c: 18, r: 11 },  // vending machine area
+      { c: 14, r: 12 },  // kitchen center
+      { c: 16, r: 13 },  // kitchen floor
     ],
     chats: ['coffee?', 'mmm snacks', 'hungry!', 'need caffeine'],
   },
@@ -382,8 +382,10 @@ const ZONES = {
     weight: 0.05,
     chatChance: 0.015,
     pois: [
-      { c: 6, r: 4 },
-      { c: 5, r: 6 },
+      { c: 14, r: 17 },  // meeting table area
+      { c: 15, r: 18 },  // meeting room floor
+      { c: 13, r: 16 },  // near table
+      { c: 17, r: 19 },  // meeting room floor
     ],
     chats: ['meeting?', 'PR review?', 'deadline?', 'great idea'],
   },
@@ -391,10 +393,10 @@ const ZONES = {
     weight: 0.15,
     chatChance: 0.015,
     pois: [
-      { c: 5, r: 9 },   // corridor
-      { c: 6, r: 9 },   // corridor
-      { c: 6, r: 12 },  // office floor
-      { c: 7, r: 13 },  // office floor
+      { c: 5, r: 5 },    // corridor (between office rows)
+      { c: 10, r: 5 },   // corridor
+      { c: 15, r: 5 },   // corridor
+      { c: 4, r: 10 },   // lower corridor
     ],
     chats: ['nice work!', 'on it!', 'bug found', 'deploying..'],
   },

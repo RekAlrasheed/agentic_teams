@@ -86,6 +86,11 @@ _check_repeated_failures() {
         local task_dir="$HEALTH_CHECK_DIR/workspace/tasks/${agent}"
         [ -d "$task_dir" ] || continue
 
+        # Skip if agent is currently working — tasks are just queued, not stuck
+        if [ -f "/tmp/navaia-${agent}-working" ]; then
+            continue
+        fi
+
         while IFS= read -r task_file; do
             [ -z "$task_file" ] && continue
             local base_name
