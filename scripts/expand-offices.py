@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Expand the pixel office by adding a duplicate office wing to the right.
+"""Expand the pixel office by adding a duplicate office wing to the LEFT.
 
-Approach:
-- Keep the ENTIRE original 21x21 layout untouched
-- Add a new office room to the RIGHT, connected by a door/glass opening
-- The new room has 4 empty desks (same furniture as existing agent desks)
-- Only extends the building where the office area is (rows 10-20)
+The new wing is placed to the left of the existing building.
+Same structure as the original office area, with slight decoration changes
+(different plants, different bookshelves, computers on desks).
+Connected by an opening/glass wall.
 """
 import json
 import copy
@@ -21,20 +20,17 @@ OLD_ROWS = layout["rows"]
 old_tiles = layout["tiles"]
 old_furn = layout["furniture"]
 old_colors = layout.get("tileColors", [None] * len(old_tiles))
-
-# Pad old_colors if shorter than tiles
 while len(old_colors) < len(old_tiles):
     old_colors.append(None)
 
-# New wing: 12 extra columns (wall + 10 floor + wall)
+# New wing: 12 columns prepended to the left
 WING_WIDTH = 12
 NEW_COLS = OLD_COLS + WING_WIDTH
 NEW_ROWS = OLD_ROWS
 
-# The office area in the original is rows 10-20
-# We'll extend only those rows into the new wing
-WING_TOP = 10   # row where the wing starts
-WING_BOT = 20   # row where the wing ends
+# The office/building area in the original spans rows 10-20
+WING_TOP = 10
+WING_BOT = 20
 
 def old_tile(r, c):
     if 0 <= r < OLD_ROWS and 0 <= c < OLD_COLS:
@@ -47,149 +43,119 @@ def old_color(r, c):
         return old_colors[idx] if idx < len(old_colors) else None
     return None
 
-# Build new tile grid
+# Build new tile grid — prepend wing columns, then original
 new_tiles = []
 new_colors = []
 
 for r in range(NEW_ROWS):
     for c in range(NEW_COLS):
-        if c < OLD_COLS:
-            # Original layout — keep exactly as-is
-            new_tiles.append(old_tile(r, c))
-            new_colors.append(old_color(r, c))
+        if c >= WING_WIDTH:
+            # Original columns shifted right — keep exactly as-is
+            orig_c = c - WING_WIDTH
+            new_tiles.append(old_tile(r, orig_c))
+            new_colors.append(old_color(r, orig_c))
         elif r < WING_TOP or r > WING_BOT:
-            # Above or below the wing area — void
+            # Above or below wing area — void
             new_tiles.append(8)
             new_colors.append(None)
         else:
-            # Inside the wing area (rows 10-20)
-            wing_c = c - OLD_COLS  # 0..11 within the wing
-
+            # Inside the wing (rows 10-20, cols 0-11)
             if r == WING_TOP:
-                # Top wall of wing
+                # Top wall
                 new_tiles.append(0)
                 new_colors.append(None)
             elif r == WING_BOT:
-                # Bottom wall of wing
+                # Bottom wall
                 new_tiles.append(0)
                 new_colors.append(None)
-            elif wing_c == WING_WIDTH - 1:
-                # Right wall of wing
+            elif c == 0:
+                # Left border wall
                 new_tiles.append(0)
                 new_colors.append(None)
             else:
-                # Floor inside the wing
-                new_tiles.append(2)  # wood floor
+                # Floor
+                new_tiles.append(2)
                 new_colors.append(None)
 
-# Now open the connecting wall (col 20) between old and new wing
-# Col 20 is the original right wall. Open it for rows 11-19 (the floor area)
+# Open the connecting wall between new wing and original building
+# The original left wall was at col 0, now shifted to col WING_WIDTH (col 12)
+# We need to open it where both sides have floor
 for r in range(WING_TOP + 1, WING_BOT):
-    idx_wall = r * NEW_COLS + (OLD_COLS - 1)  # col 20
-    left = old_tile(r, OLD_COLS - 2)  # col 19
-    if left in (1, 2, 6):  # if there's floor to the left
-        new_tiles[idx_wall] = 2  # open the wall (make it floor)
-    # Keep walls as walls where the original had non-floor
+    wall_c = WING_WIDTH  # the original left wall, now at col 12
+    idx = r * NEW_COLS + wall_c
+    # Check if original had floor just inside (col 1 in original = col 13 in new)
+    orig_inside = old_tile(r, 1)
+    # Check if new wing has floor at col 11 (just left of the wall)
+    wing_floor = new_tiles[r * NEW_COLS + (WING_WIDTH - 1)]
+    if orig_inside in (1, 2, 6) and wing_floor == 2:
+        new_tiles[idx] = 2  # open the wall
 
-# Also need to open the first column of the new wing (col 21)
-# It should be floor to connect to col 20
-for r in range(WING_TOP + 1, WING_BOT):
-    idx = r * NEW_COLS + OLD_COLS  # col 21
-    if new_tiles[r * NEW_COLS + (OLD_COLS - 1)] == 2:  # if col 20 is now floor
-        new_tiles[idx] = 2  # make col 21 floor too
-
-# Add a glass/wall divider effect — keep wall at specific rows for visual separation
-# Put wall pillars at the connection point to suggest a glass wall
-for r in [WING_TOP + 1, WING_TOP + 5]:  # rows 11, 15 — pillar positions
-    idx = r * NEW_COLS + (OLD_COLS - 1)
+# Add wall pillars at the connection for glass-wall effect
+for r in [WING_TOP + 1, WING_TOP + 5]:  # rows 11 and 15
+    idx = r * NEW_COLS + WING_WIDTH
     new_tiles[idx] = 0  # wall pillar
 
-# Duplicate office furniture into the new wing
-# Original agent desks are at approximately:
-#   Navi:  desk at (2,14), chair at (3,16) — col 2-5, rows 14-16
-#   Muse:  desk at (7,14), chair at (8,16) — col 7-10, rows 14-16
-#   Arch:  desk at (2,18), chair at (3,20) — col 2-5, rows 18-20
-#   Sage:  desk at (7,18), chair at (8,20) — col 7-10, rows 18-20
-#
-# In the new wing, the floor area is cols 21-31, rows 11-19
-# Let's place 4 desks similarly:
-#   New desk 1: cols 22-25, rows 12-14
-#   New desk 2: cols 27-30, rows 12-14
-#   New desk 3: cols 22-25, rows 16-18
-#   New desk 4: cols 27-30, rows 16-18
+# Add a horizontal wall divider in the new wing at row 15 (matching original structure)
+for c in range(1, WING_WIDTH):
+    idx = 15 * NEW_COLS + c
+    if c in (5, 6):  # door opening
+        new_tiles[idx] = 2
+    else:
+        new_tiles[idx] = 0
 
-new_furn = copy.deepcopy(old_furn)
-
-# Find what furniture types are used for the existing desks
-# Look at furniture near the agent positions
-desk_type = None
-chair_type = None
+# Shift all original furniture positions by WING_WIDTH
+new_furn = []
 for item in old_furn:
-    if item["type"] in ("ASSET_NEW_106",):
-        desk_type = item["type"]
-    if item["type"] in ("ASSET_49",):
-        chair_type = item["type"]
-    # Also check for specific desk/chair patterns
-    if "color" not in item:
-        if item.get("type", "").startswith("ASSET"):
-            pass
+    shifted = copy.deepcopy(item)
+    shifted["col"] = item["col"] + WING_WIDTH
+    new_furn.append(shifted)
 
-# If we couldn't find them, use common defaults
-if not desk_type:
-    desk_type = "ASSET_NEW_106"
-if not chair_type:
-    chair_type = "ASSET_49"
-
-print(f"Desk type: {desk_type}, Chair type: {chair_type}")
-
-# Add 4 desk+chair pairs in the new wing
-# Row arrangement matches the original office layout
-wing_start_col = OLD_COLS + 1  # col 22
-
-def add_furn(ftype, col, row, color=None):
+# Add new furniture in the wing
+def add(ftype, col, row, color=None):
     item = {"type": ftype, "col": col, "row": row}
     if color:
         item["color"] = color
     new_furn.append(item)
 
-# Desk pair 1 (top-left of new wing)
-add_furn(desk_type, wing_start_col, 12)
-add_furn(chair_type, wing_start_col + 1, 13)
+# === 4 DESK SETUPS WITH COMPUTERS ===
 
-# Desk pair 2 (top-right of new wing)
-add_furn(desk_type, wing_start_col + 5, 12)
-add_furn(chair_type, wing_start_col + 6, 13)
+# Desk 1 (upper-left): row 12-13, cols 2-4
+add("ASSET_NEW_106", 2, 12)            # desk
+add("ASSET_49", 3, 13)                  # chair
+add("ASSET_79", 2, 11)                  # monitor (on)
 
-# Desk pair 3 (bottom-left of new wing)
-add_furn(desk_type, wing_start_col, 16)
-add_furn(chair_type, wing_start_col + 1, 17)
+# Desk 2 (upper-right): row 12-13, cols 7-9
+add("ASSET_NEW_106", 7, 12)            # desk
+add("ASSET_49", 8, 13)                  # chair
+add("ASSET_108", 7, 11)                 # laptop (on)
 
-# Desk pair 4 (bottom-right of new wing)
-add_furn(desk_type, wing_start_col + 5, 16)
-add_furn(chair_type, wing_start_col + 6, 17)
+# Desk 3 (lower-left): row 16-17, cols 2-4
+add("ASSET_NEW_106", 2, 16)            # desk
+add("ASSET_49", 3, 17)                  # chair
+add("ASSET_92", 2, 15)                  # full computer with coffee (on)
 
-# Add some decorative items
-bookshelf_type = "ASSET_17"  # bookshelf (used in original offices)
-plant_type = "ASSET_31"       # plant
+# Desk 4 (lower-right): row 16-17, cols 7-9
+add("ASSET_NEW_106", 7, 16)            # desk
+add("ASSET_49", 8, 17)                  # chair
+add("ASSET_79", 7, 15)                  # monitor (on)
 
-# Bookshelves against the wall
-add_furn(bookshelf_type, wing_start_col + 3, 11)
-add_furn(bookshelf_type, wing_start_col + 8, 11)
+# === DECORATION — slightly different from original ===
 
-# Plants
-add_furn(plant_type, wing_start_col + 9, 12)
-add_furn(plant_type, wing_start_col + 9, 17)
+# White bookshelves (original uses wooden ones)
+add("ASSET_24", 4, 11)                  # full white bookshelf (upper area)
+add("ASSET_29", 9, 11)                  # full white bookshelf 2 (upper area)
+add("ASSET_23", 4, 15)                  # white bookshelf (lower area)
+add("ASSET_28", 9, 15)                  # white bookshelf 2 (lower area)
 
-# Wall divider between upper and lower desk pairs (row 15)
-for c_offset in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]:
-    r = 15
-    c = wing_start_col + c_offset
-    idx = r * NEW_COLS + c
-    # Make a partial wall with door openings
-    if c_offset in (3, 4):
-        new_tiles[idx] = 2  # door opening
-    else:
-        new_tiles[idx] = 0  # wall
+# Different plants (original uses ASSET_31)
+add("ASSET_140", 1, 13)                 # white plant 2
+add("ASSET_142", 10, 13)                # plant 2 (different style)
+add("ASSET_143", 1, 18)                 # plant 3
+add("ASSET_133_0_0", 10, 18)            # white plant 1
+
+# Books on some desks
+add("ASSET_71", 4, 12)                  # blue book (desk 1)
+add("ASSET_72", 9, 16)                  # red book (desk 4)
 
 # Save
 new_layout = {
@@ -206,7 +172,7 @@ with open(LAYOUT_FILE, 'w') as f:
 
 # Print
 symbols = {0: '█', 1: '░', 2: '·', 6: '▓', 8: ' '}
-print(f"\nNew layout ({NEW_COLS}x{NEW_ROWS}):")
+print(f"New layout ({NEW_COLS}x{NEW_ROWS}):")
 for r in range(NEW_ROWS):
     row_str = ""
     for c in range(NEW_COLS):
