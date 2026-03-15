@@ -12,6 +12,7 @@ import time
 import threading
 import urllib.parse
 import urllib.request
+import uuid
 from datetime import datetime, timezone
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from socketserver import ThreadingMixIn
@@ -46,6 +47,8 @@ TO_FOUNDER_DIR = COMMS_DIR / "to-manager"
 FROM_FOUNDER_DIR = COMMS_DIR / "from-manager"
 INTER_AGENT_DIR = COMMS_DIR / "inter-agent"
 CHAT_LOG = DASHBOARD_DIR / "chat_history.jsonl"
+CHAT_REPLIES_DIR = COMMS_DIR / "chat-replies"
+CHAT_REPLIES_ARCHIVE = CHAT_REPLIES_DIR / "archive"
 FAILED_DIR = TASKS_DIR / "failed"
 
 # Trello config from env
@@ -765,7 +768,12 @@ def load_agent_chat_history(agent_id, limit=50):
 
 
 def agent_chat(agent_id, message):
-    """Chat with a specific agent using their CLAUDE.md as context."""
+    """Send a chat message to an agent via file-based messaging.
+
+    Instead of spawning a Claude subprocess, writes a chat file to the agent's
+    task folder. The agent picks it up in its next polling cycle (~30s) and
+    responds via workspace/comms/chat-replies/.
+    """
     agents = load_agents()
     agent = next((a for a in agents if a["id"] == agent_id), None)
     if not agent:
@@ -773,71 +781,102 @@ def agent_chat(agent_id, message):
 
     save_agent_message(agent_id, "user", message)
 
-    # Load agent's CLAUDE.md for context
-    agent_claude_md = REPO_ROOT / "agents" / agent_id / "CLAUDE.md"
-    agent_context = ""
-    if agent_claude_md.exists():
+    # Map agent ID to task folder
+    agent_names = {"pm": "inbox", "creative": "creative", "technical": "technical", "admin": "admin", "ceo": "ceo"}
+    task_folder = agent_names.get(agent_id, agent_id)
+    task_dir = REPO_ROOT / "workspace" / "tasks" / task_folder
+    task_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create chat-replies directories
+    CHAT_REPLIES_DIR.mkdir(parents=True, exist_ok=True)
+    CHAT_REPLIES_ARCHIVE.mkdir(parents=True, exist_ok=True)
+
+    # Generate message ID and timestamp
+    msg_id = str(uuid.uuid4())[:8]
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+
+    # Write chat task file for the agent
+    chat_file = task_dir / f"{ts}-chat-{msg_id}.md"
+    agent_name = agent.get("name", agent_id)
+    chat_content = f"""## CHAT: Direct Message from Manager
+**Type:** direct-chat
+**Message-ID:** {msg_id}
+**From:** Manager
+**Time:** {datetime.now(timezone.utc).isoformat()}
+
+### Message
+{message}
+
+### Instructions for Agent
+Read this message and write a brief, helpful reply to:
+`workspace/comms/chat-replies/{ts}-chat-reply-{agent_id}-{msg_id}.md`
+
+Format your reply as:
+```
+## CHAT REPLY
+**Message-ID:** {msg_id}
+**From:** {agent_name}
+**Time:** (current time)
+
+(your response here)
+```
+
+After writing the reply, this task is complete.
+"""
+    chat_file.write_text(chat_content, encoding="utf-8")
+
+    log_activity("chat", f"Message to {agent_name}: {message[:40]}", agent_id)
+    return {
+        "status": "delivered",
+        "message_id": msg_id,
+        "message": f"Message delivered to {agent_name}. Response expected in ~30s.",
+    }
+
+
+def get_agent_chat_replies(agent_id, since=None):
+    """Poll for chat replies from a specific agent."""
+    CHAT_REPLIES_DIR.mkdir(parents=True, exist_ok=True)
+    CHAT_REPLIES_ARCHIVE.mkdir(parents=True, exist_ok=True)
+
+    replies = []
+    for f in sorted(CHAT_REPLIES_DIR.iterdir()):
+        if not f.is_file() or not f.name.endswith(".md"):
+            continue
+        if f"chat-reply-{agent_id}" not in f.name:
+            continue
+        if since and f.stat().st_mtime < since:
+            continue
         try:
-            agent_context = agent_claude_md.read_text(encoding="utf-8")[:3000]
+            content = f.read_text(encoding="utf-8")
+            # Extract reply text after the header
+            lines = content.strip().split("\n")
+            reply_text = ""
+            past_header = False
+            for line in lines:
+                if past_header:
+                    reply_text += line + "\n"
+                elif line.strip() == "" and any(l.startswith("**From:**") for l in lines[:6]):
+                    past_header = True
+            reply_text = reply_text.strip() or content
+            replies.append({
+                "filename": f.name,
+                "text": reply_text,
+                "time": datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc).isoformat(),
+            })
+            # Archive after reading
+            f.rename(CHAT_REPLIES_ARCHIVE / f.name)
         except Exception:
-            pass
+            continue
+    return replies
 
-    # Build conversation context
-    recent = load_agent_chat_history(agent_id, 5)
-    conv = "\n".join(
-        f"{'Manager' if m['role'] == 'user' else agent['name']}: {m['text'][:150]}"
-        for m in recent
-    ) or "No previous messages."
 
-    system_prompt = (
-        f"You are {agent['name']}, the {agent['role']} agent of Navaia's AI Workforce.\n\n"
-        f"{agent_context}\n\n"
-        "You are chatting directly with the Manager (CEO). Be concise and helpful.\n"
-        'RESPOND WITH JSON: {"message": "your response"}\n\n'
-        f"Recent conversation:\n{conv}"
-    )
-
-    model = agent.get("model", "sonnet")
-
-    try:
-        env = os.environ.copy()
-        env.pop("CLAUDECODE", None)
-        proc = subprocess.run(
-            ["claude", "-p",
-             "--model", model,
-             "--max-turns", "1",
-             "--output-format", "text",
-             "--system-prompt", system_prompt,
-             "--", message],
-            capture_output=True, text=True, timeout=30,
-            env=env, cwd=str(REPO_ROOT),
-        )
-        raw = proc.stdout.strip() or proc.stderr.strip()
-        if not raw:
-            reply = "I'm having trouble responding right now."
-        else:
-            try:
-                json_str = raw
-                if "```json" in json_str:
-                    json_str = json_str.split("```json")[1].split("```")[0].strip()
-                elif "```" in json_str:
-                    parts = json_str.split("```")
-                    if len(parts) >= 3:
-                        json_str = parts[1].strip()
-                result = json.loads(json_str)
-                reply = result.get("message", raw[:2000])
-            except (json.JSONDecodeError, ValueError):
-                reply = raw[:2000]
-    except subprocess.TimeoutExpired:
-        reply = "I'm taking too long. Try again?"
-    except FileNotFoundError:
-        reply = "Claude CLI not available."
-    except Exception:
-        reply = "Something went wrong. Try again?"
-
-    save_agent_message(agent_id, "assistant", reply)
-    log_activity("chat", f"Chat with {agent['name']}: {message[:40]}", agent_id)
-    return {"message": reply}
+def stop_agent(agent_id):
+    """Send a stop signal to a specific agent."""
+    stop_file = REPO_ROOT / "workspace" / "comms" / f"STOP-{agent_id}"
+    stop_file.parent.mkdir(parents=True, exist_ok=True)
+    stop_file.write_text(f"Stop requested at {datetime.now(timezone.utc).isoformat()}\n")
+    log_activity("stop", f"Stop signal sent to {agent_id}", agent_id)
+    return {"status": "stop_signal_sent", "agent": agent_id}
 
 
 # ── HTTP Handler ─────────────────────────────────────────────────────────────
@@ -1069,6 +1108,11 @@ class CrewHQHandler(SimpleHTTPRequestHandler):
                 self.send_json(load_agent_chat_history(agent_id))
                 return
 
+            if subpath == "chat/replies":
+                replies = get_agent_chat_replies(agent_id)
+                self.send_json(replies)
+                return
+
             if subpath == "status":
                 status = get_agent_detail_status(agent_id)
                 if status:
@@ -1144,6 +1188,11 @@ class CrewHQHandler(SimpleHTTPRequestHandler):
                     self.send_json({"error": "Message required"}, 400)
                     return
                 result = agent_chat(agent_id, message)
+                self.send_json(result)
+                return
+
+            if subpath == "stop":
+                result = stop_agent(agent_id)
                 self.send_json(result)
                 return
 

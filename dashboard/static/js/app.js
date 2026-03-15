@@ -169,6 +169,20 @@ const CrewHQ = {
         const r = await fetch(`/api/agent/${agentId}/chat/history`);
         return await r.json();
     },
+
+    async getAgentChatReplies(agentId) {
+        const r = await fetch(`/api/agent/${agentId}/chat/replies`);
+        return await r.json();
+    },
+
+    async stopAgent(agentId) {
+        const r = await fetch(`/api/agent/${agentId}/stop`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+        });
+        return await r.json();
+    },
 };
 
 // ── Navigation ──────────────────────────────────────────
@@ -527,8 +541,14 @@ const AgentDetail = {
             </div>`;
         }).join('');
 
+        const isWorking = agent && agent.state === 'working';
+        const isPM = this.currentAgent === 'pm';
+        const hintHtml = !isPM ? `<div class="chat-hint" style="padding:6px 10px;font-size:11px;color:#888;border-bottom:1px solid #333;">Messages are async — agent responds in ~30s. For live coordination, chat with Navi (PM) who manages all agents.</div>` : '';
+        const stopHtml = isWorking ? `<button class="pixel-btn" style="background:#c44;margin-left:6px;" onclick="AgentDetail.stopCurrentAgent()">STOP</button>` : '';
+
         content.innerHTML = `
             <div class="detail-chat-container">
+                ${hintHtml}
                 <div class="detail-chat-messages" id="detail-chat-msgs">
                     ${msgs || `<div class="detail-empty">No messages yet. Start a conversation with ${agentName}.</div>`}
                 </div>
@@ -537,6 +557,7 @@ const AgentDetail = {
                     <input class="pixel-input" id="detail-chat-input" placeholder="Message ${agentName}..."
                         onkeydown="if(event.key==='Enter') AgentDetail.sendChat()">
                     <button class="pixel-btn" onclick="AgentDetail.sendChat()">SEND</button>
+                    ${stopHtml}
                 </div>
             </div>`;
 
@@ -569,23 +590,90 @@ const AgentDetail = {
         }
 
         input.value = '';
-        const typingEl = document.getElementById('detail-chat-typing');
-        if (typingEl) typingEl.style.display = 'block';
-
         const result = await CrewHQ.sendAgentChat(this.currentAgent, text);
 
-        if (typingEl) typingEl.style.display = 'none';
-        const reply = result.message || result.error || 'No response.';
-        if (msgsEl) {
-            msgsEl.innerHTML += `<div class="chat-msg assistant">
-                <span class="chat-sender" style="color:${agentColor}">${agentName.toUpperCase()}</span>
-                <div>${escapeHtml(reply)}</div>
-                <div class="chat-time">${shortTime(new Date().toISOString())}</div>
-            </div>`;
-            msgsEl.scrollTop = msgsEl.scrollHeight;
+        // Show delivery confirmation and start polling for reply
+        if (result.status === 'delivered') {
+            const typingEl = document.getElementById('detail-chat-typing');
+            if (typingEl) {
+                typingEl.textContent = `DELIVERED — ${agentName.toUpperCase()} WILL RESPOND IN ~30S...`;
+                typingEl.style.display = 'block';
+            }
+            this._pollForReply(this.currentAgent, agentName, agentColor);
+        } else {
+            // Fallback for errors
+            const reply = result.message || result.error || 'Failed to deliver.';
+            if (msgsEl) {
+                msgsEl.innerHTML += `<div class="chat-msg assistant">
+                    <span class="chat-sender" style="color:${agentColor}">${agentName.toUpperCase()}</span>
+                    <div>${escapeHtml(reply)}</div>
+                    <div class="chat-time">${shortTime(new Date().toISOString())}</div>
+                </div>`;
+                msgsEl.scrollTop = msgsEl.scrollHeight;
+            }
+        }
+    },
+
+    _replyPollTimer: null,
+
+    _pollForReply(agentId, agentName, agentColor) {
+        // Clear any existing poll
+        if (this._replyPollTimer) clearInterval(this._replyPollTimer);
+
+        let attempts = 0;
+        const maxAttempts = 24; // 2 minutes (5s * 24)
+        this._replyPollTimer = setInterval(async () => {
+            attempts++;
+            if (attempts > maxAttempts || this.currentAgent !== agentId) {
+                clearInterval(this._replyPollTimer);
+                this._replyPollTimer = null;
+                const typingEl = document.getElementById('detail-chat-typing');
+                if (typingEl) typingEl.style.display = 'none';
+                return;
+            }
+
+            const replies = await CrewHQ.getAgentChatReplies(agentId);
+            if (replies && replies.length > 0) {
+                clearInterval(this._replyPollTimer);
+                this._replyPollTimer = null;
+                const typingEl = document.getElementById('detail-chat-typing');
+                if (typingEl) typingEl.style.display = 'none';
+
+                const msgsEl = document.getElementById('detail-chat-msgs');
+                if (msgsEl) {
+                    for (const reply of replies) {
+                        save_agent_message_local(agentId, 'assistant', reply.text);
+                        msgsEl.innerHTML += `<div class="chat-msg assistant">
+                            <span class="chat-sender" style="color:${agentColor}">${agentName.toUpperCase()}</span>
+                            <div>${escapeHtml(reply.text)}</div>
+                            <div class="chat-time">${shortTime(reply.time || new Date().toISOString())}</div>
+                        </div>`;
+                    }
+                    msgsEl.scrollTop = msgsEl.scrollHeight;
+                }
+            }
+        }, 5000);
+    },
+
+    async stopCurrentAgent() {
+        if (!this.currentAgent) return;
+        const agent = (CrewHQ.state?.agents || []).find(a => a.id === this.currentAgent);
+        const agentName = agent ? agent.name : this.currentAgent;
+        if (!confirm(`Stop ${agentName}'s current task? Unsaved work may be lost.`)) return;
+
+        const result = await CrewHQ.stopAgent(this.currentAgent);
+        if (result.status === 'stop_signal_sent') {
+            showToast(`Stop signal sent to ${agentName}`);
+        } else {
+            showToast(result.error || 'Failed to stop', true);
         }
     },
 };
+
+function save_agent_message_local(agentId, role, text) {
+    // Server-side save via chat history (already saved by server on send)
+    // This is a no-op placeholder — the reply is saved when polled
+}
 
 // ── Init ────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {

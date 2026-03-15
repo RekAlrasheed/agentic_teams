@@ -421,9 +421,14 @@ echo ""
 
 while [ "$SESSION_COUNTER" -lt "$MAX_RESTARTS" ]; do
 
-    # Check STOP signal
+    # Check STOP signal (global or per-agent)
     if [ -f "$STOP_FILE" ]; then
         echo "[$DISPLAY_NAME] STOP signal. Halting."
+        break
+    fi
+    if [ -f "workspace/comms/STOP-${AGENT_NAME}" ]; then
+        rm -f "workspace/comms/STOP-${AGENT_NAME}"
+        echo "[$DISPLAY_NAME] Per-agent STOP signal received. Exiting."
         break
     fi
 
