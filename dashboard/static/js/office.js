@@ -8,9 +8,9 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 const TILE = 16, Z = 3, T = TILE * Z;
-const COLS = 21, ROWS = 21;
+let COLS = 21, ROWS = 21;
 canvas.width = COLS * T; canvas.height = ROWS * T;
-const CW = canvas.width, CH = canvas.height;
+let CW = canvas.width, CH = canvas.height;
 
 /* ── Asset paths ───────────────────────────────────────────── */
 const PA = '/static/sprites/pixel-agents/';
@@ -40,6 +40,10 @@ async function loadAssets() {
     fetch(PA + 'default-layout.json').then(r => r.json()),
     fetch(PA + 'furniture/furniture-catalog.json').then(r => r.json()),
   ]);
+  COLS = layoutJ.cols || 21;
+  ROWS = layoutJ.rows || 21;
+  canvas.width = COLS * T; canvas.height = ROWS * T;
+  CW = canvas.width; CH = canvas.height;
   TILES = layoutJ.tiles;
   FURN_LIST = layoutJ.furniture;
   for (const a of catalogJ.assets) CATALOG[a.id] = a;
@@ -388,7 +392,7 @@ const ZONES = {
     chats: ['meeting?', 'PR review?', 'deadline?', 'great idea'],
   },
   office: {
-    weight: 0.15,
+    weight: 0.10,
     chatChance: 0.015,
     pois: [
       { c: 5, r: 9 },   // corridor
@@ -397,6 +401,17 @@ const ZONES = {
       { c: 7, r: 13 },  // office floor
     ],
     chats: ['nice work!', 'on it!', 'bug found', 'deploying..'],
+  },
+  newWing: {
+    weight: 0.05,
+    chatChance: 0.01,
+    pois: [
+      { c: 24, r: 13 },  // new wing upper area
+      { c: 28, r: 13 },  // new wing upper area
+      { c: 24, r: 17 },  // new wing lower area
+      { c: 28, r: 17 },  // new wing lower area
+    ],
+    chats: ['quiet here', 'nice office', 'new space!', 'room to grow'],
   },
 };
 
