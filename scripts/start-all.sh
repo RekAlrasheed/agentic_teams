@@ -131,7 +131,11 @@ else
     tmux new-window -t "$SESSION_NAME" -n "ceo" \
         "cd $REPO_ROOT && bash scripts/agent-loop.sh ceo; read -p 'CEO stopped. Press Enter...'"
 
-    # Window 7: Logs overview
+    # Window 7: CEO Scheduler (pure bash, zero tokens)
+    tmux new-window -t "$SESSION_NAME" -n "ceo-sched" \
+        "cd $REPO_ROOT && bash scripts/ceo-scheduler.sh; read -p 'CEO Scheduler stopped. Press Enter...'"
+
+    # Window 8: Logs overview
     tmux new-window -t "$SESSION_NAME" -n "logs" \
         "cd $REPO_ROOT && echo 'Navaia AI Workforce Status' && echo '=========================' && while true; do clear; echo '=== Agent Status ===' && echo '' && for a in pm creative technical admin ceo; do if [ -f /tmp/navaia-\${a}-working ]; then echo \"  \$a: WORKING\"; elif pgrep -f \"agent-loop.sh \$a\" > /dev/null 2>&1; then echo \"  \$a: IDLE\"; else echo \"  \$a: OFFLINE\"; fi; done && echo '' && echo '=== Tasks ===' && echo \"  Inbox: \$(find workspace/tasks/inbox -type f ! -name .gitkeep 2>/dev/null | wc -l | tr -d ' ')\" && echo \"  Creative: \$(find workspace/tasks/creative -type f ! -name .gitkeep 2>/dev/null | wc -l | tr -d ' ')\" && echo \"  Technical: \$(find workspace/tasks/technical -type f ! -name .gitkeep 2>/dev/null | wc -l | tr -d ' ')\" && echo \"  Admin: \$(find workspace/tasks/admin -type f ! -name .gitkeep 2>/dev/null | wc -l | tr -d ' ')\" && echo \"  CEO: \$(find workspace/tasks/ceo -type f ! -name .gitkeep 2>/dev/null | wc -l | tr -d ' ')\" && echo \"  Done: \$(find workspace/tasks/done -type f ! -name .gitkeep 2>/dev/null | wc -l | tr -d ' ')\" && echo '' && echo 'Refreshing every 5s... (Ctrl+C to stop)' && sleep 5; done"
 
