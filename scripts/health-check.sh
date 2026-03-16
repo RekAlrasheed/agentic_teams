@@ -86,6 +86,12 @@ _check_repeated_failures() {
         local task_dir="$HEALTH_CHECK_DIR/workspace/tasks/${agent}"
         [ -d "$task_dir" ] || continue
 
+        # Skip if agent is actively working — don't touch tasks mid-execution
+        local lock_file="/tmp/navaia-${agent}-working"
+        if [ -f "$lock_file" ]; then
+            continue
+        fi
+
         while IFS= read -r task_file; do
             [ -z "$task_file" ] && continue
             local base_name
@@ -100,8 +106,8 @@ _check_repeated_failures() {
             count=$((count + 1))
             echo "$count" > "$state_file"
 
-            if [ "$count" -ge 3 ]; then
-                # Move to failed/ with metadata
+            if [ "$count" -ge 6 ]; then
+                # Move to failed/ with metadata (6 cycles = ~7.5 min idle)
                 {
                     echo ""
                     echo "---"
@@ -109,7 +115,7 @@ _check_repeated_failures() {
                     echo "**Agent:** $agent"
                     echo "**Failed at:** $(date '+%Y-%m-%d %H:%M:%S')"
                     echo "**Cycles seen:** $count"
-                    echo "**Reason:** Task remained in folder for $count consecutive health checks"
+                    echo "**Reason:** Task remained in folder for $count consecutive health checks while agent idle"
                 } >> "$task_file"
                 mv "$task_file" "${HEALTH_FAILED_DIR}/${agent}-${base_name}"
                 rm -f "$state_file"

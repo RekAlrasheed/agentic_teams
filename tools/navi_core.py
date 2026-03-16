@@ -602,6 +602,7 @@ def _call_claude(message: str, system_prompt: str, model: str, max_turns: str) -
     """Shared Claude CLI invocation. Returns raw response text."""
     env = os.environ.copy()
     env.pop("CLAUDECODE", None)
+    env.pop("CLAUDE_CODE_ENTRYPOINT", None)
 
     import time
     start = time.monotonic()
@@ -640,6 +641,7 @@ async def _call_claude_async(message: str, system_prompt: str, model: str, max_t
     """Shared async Claude CLI invocation. Returns raw response text."""
     env = os.environ.copy()
     env.pop("CLAUDECODE", None)
+    env.pop("CLAUDE_CODE_ENTRYPOINT", None)
 
     import time
     start = time.monotonic()

@@ -89,7 +89,7 @@ STOP_FILE="workspace/comms/STOP"
 FAILED_DIR="workspace/tasks/failed"
 SESSION_DIR="workspace/sessions/${AGENT_NAME}"
 SESSION_RESPONSES_DIR="${SESSION_DIR}/responses"
-MAX_RESTARTS=${MAX_RESTARTS:-200}
+MAX_RESTARTS=${MAX_RESTARTS:-5000}
 MAX_TASK_RETRIES=3
 SESSION_COUNTER=0
 CONSECUTIVE_FAILURES=0
@@ -154,7 +154,7 @@ trap cleanup EXIT INT TERM
 count_tasks() {
     local dir="$1"
     if [ -d "$dir" ]; then
-        find "$dir" -type f ! -name '.gitkeep' 2>/dev/null | wc -l | tr -d ' '
+        find "$dir" -maxdepth 1 -type f ! -name '.gitkeep' 2>/dev/null | wc -l | tr -d ' '
     else
         echo "0"
     fi
