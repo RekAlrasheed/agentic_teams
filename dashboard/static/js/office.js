@@ -440,16 +440,51 @@ const ZONES = {
     ],
     chats: ['quiet here', 'nice office', 'new space!', 'room to grow'],
   },
+  ceoOffice: {
+    weight: 0,  // CEO-only zone, not in default rotation
+    chatChance: 0.01,
+    pois: [
+      { c: 28, r: 4 },   // CEO office near desk
+      { c: 29, r: 4 },   // CEO office right side
+      { c: 28, r: 6 },   // CEO office lower area
+      { c: 29, r: 6 },   // CEO office lower-right
+    ],
+    chats: ['reviewing KPIs', 'strategy time', 'good numbers', 'let me think'],
+  },
 };
 
-function pickZonePOI() {
+// CEO (Rex) has his own zone weights — mostly stays in his office & meeting room
+const CEO_ZONE_WEIGHTS = {
+  ceoOffice: 0.55,  // mostly in his office
+  meeting:   0.25,  // frequent meeting room visits
+  kitchen:   0.10,  // occasional coffee run
+  lounge:    0.05,  // rare lounge visit
+  office:    0.03,  // rarely passes through main office
+  newWing:   0.02,  // almost never
+};
+
+function pickZonePOI(agentId) {
+  const weights = agentId === 'ceo' ? CEO_ZONE_WEIGHTS : null;
   const r = Math.random();
   let cum = 0;
-  for (const [name, zone] of Object.entries(ZONES)) {
-    cum += zone.weight;
-    if (r <= cum) {
-      const poi = zone.pois[Math.floor(Math.random() * zone.pois.length)];
-      return { ...poi, zone: name, chatChance: zone.chatChance };
+
+  if (weights) {
+    for (const [name, w] of Object.entries(weights)) {
+      cum += w;
+      if (r <= cum) {
+        const zone = ZONES[name];
+        const poi = zone.pois[Math.floor(Math.random() * zone.pois.length)];
+        return { ...poi, zone: name, chatChance: zone.chatChance };
+      }
+    }
+  } else {
+    for (const [name, zone] of Object.entries(ZONES)) {
+      if (zone.weight === 0) continue;  // skip CEO-only zones
+      cum += zone.weight;
+      if (r <= cum) {
+        const poi = zone.pois[Math.floor(Math.random() * zone.pois.length)];
+        return { ...poi, zone: name, chatChance: zone.chatChance };
+      }
     }
   }
   const z = ZONES.office;
@@ -504,7 +539,7 @@ function updSim(id, as, dt) {
     if (s.st === 'sit' || s.st === 'idle_sit') {
       s.it -= dt;
       if (s.it <= 0) {
-        const t = pickZonePOI();
+        const t = pickZonePOI(id);
         const pp = findPath(s.col, s.row, t.c, t.r);
         if (pp.length) {
           s.path = pp; s.pi = 0; s.mp = 0; s.st = 'walk'; s.wc++;
@@ -516,12 +551,13 @@ function updSim(id, as, dt) {
       s.it -= dt; s.ct -= dt;
       if (s.ct <= 0) s.st = 'stand';
       if (s.it <= 0) {
-        if (s.wc > 4 + Math.floor(Math.random() * 3)) {
+        const maxWanders = id === 'ceo' ? 2 : 4 + Math.floor(Math.random() * 3);
+        if (s.wc > maxWanders) {
           const pp = findPath(s.col, s.row, cfg.sCol, cfg.sRow);
           if (pp.length) { s.path = pp; s.pi = 0; s.mp = 0; s.st = 'walk'; s._goSeat = true; }
           s.wc = 0;
         } else {
-          const t = pickZonePOI();
+          const t = pickZonePOI(id);
           const pp = findPath(s.col, s.row, t.c, t.r);
           if (pp.length) {
             s.path = pp; s.pi = 0; s.mp = 0; s.st = 'walk'; s._goSeat = false; s.wc++;
