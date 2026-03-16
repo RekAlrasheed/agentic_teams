@@ -4,29 +4,49 @@ __pycache__/
 node_modules/
 .DS_Store
 *.log
+plan.md
+.claude/
 
-# Don't commit active workspace files (they're ephemeral)
+# Per-agent git worktrees (each agent's isolated workspace)
+.worktrees/
+
+# Task dispatch — ephemeral (agents consume and delete)
 workspace/tasks/inbox/*
 workspace/tasks/active/*
-workspace/comms/to-founder/*
-workspace/comms/from-founder/*
-workspace/comms/inter-agent/*
-workspace/comms/STOP
-
-# Keep the directory structure
-!workspace/**/.gitkeep
-
-# Don't commit large binary outputs (commit to separate branch or S3 if needed)
-workspace/outputs/**/*.xlsx
-workspace/outputs/**/*.pptx
-workspace/outputs/**/*.pdf
-
-# Runtime data — never commit
-dashboard/chat_history*.jsonl
-.claude/
 workspace/tasks/admin/*
 workspace/tasks/creative/*
 workspace/tasks/technical/*
+workspace/tasks/ceo/*
 workspace/tasks/blocked/*
 workspace/tasks/rejected/*
-plan.md
+workspace/tasks/failed/*
+workspace/tasks/done/*
+
+# Comms — ephemeral status messages
+workspace/comms/to-manager/*
+workspace/comms/from-manager/*
+workspace/comms/inter-agent/*
+workspace/comms/STOP
+workspace/comms/STOP-*
+workspace/comms/chat-replies/
+
+# Session state — ephemeral
+workspace/sessions/
+
+# Databases — binary, rebuilt from backfill if lost
+workspace/*.db
+workspace/*.db-shm
+workspace/*.db-wal
+
+# Keep directory structure
+!workspace/**/.gitkeep
+
+# Binary outputs (commit text outputs, not binary)
+workspace/outputs/**/*.xlsx
+workspace/outputs/**/*.pptx
+workspace/outputs/**/*.pdf
+workspace/outputs/**/*.png
+workspace/outputs/**/*.jpg
+
+# Chat history — runtime
+dashboard/chat_*.jsonl

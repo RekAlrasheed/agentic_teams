@@ -85,10 +85,23 @@ class TaskDB:
                 read_at TEXT
             );
 
+            CREATE TABLE IF NOT EXISTS outputs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER,
+                agent TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                filepath TEXT NOT NULL,
+                size_bytes INTEGER DEFAULT 0,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (task_id) REFERENCES tasks(id)
+            );
+
             CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
             CREATE INDEX IF NOT EXISTS idx_tasks_agent ON tasks(agent);
             CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(created_at);
             CREATE INDEX IF NOT EXISTS idx_messages_to ON messages(to_agent, read_at);
+            CREATE INDEX IF NOT EXISTS idx_outputs_agent ON outputs(agent);
+            CREATE INDEX IF NOT EXISTS idx_outputs_created ON outputs(created_at);
         """)
         conn.commit()
 
@@ -244,6 +257,56 @@ class TaskDB:
                 parts.append(f"{s['failed']} failed")
             lines.append(f"  {agent}: {', '.join(parts)}")
         return "Task DB:\n" + "\n".join(lines)
+
+    # ── Output tracking ────────────────────────────────────────────────
+
+    def record_output(
+        self,
+        agent: str,
+        filename: str,
+        filepath: str,
+        size_bytes: int = 0,
+        task_id: Optional[int] = None,
+    ) -> int:
+        """Record an output file produced by an agent."""
+        now = datetime.now(timezone.utc).isoformat()
+        conn = self._get_conn()
+        cursor = conn.execute(
+            """INSERT INTO outputs (task_id, agent, filename, filepath, size_bytes, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (task_id, agent.lower(), filename, filepath, size_bytes, now),
+        )
+        conn.commit()
+        return cursor.lastrowid
+
+    def get_outputs(
+        self, agent: Optional[str] = None, limit: int = 100
+    ) -> list[dict]:
+        """Get output files, optionally filtered by agent."""
+        conn = self._get_conn()
+        query = "SELECT * FROM outputs WHERE 1=1"
+        params: list = []
+        if agent:
+            query += " AND agent = ?"
+            params.append(agent.lower())
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        return [dict(r) for r in conn.execute(query, params).fetchall()]
+
+    def get_daily_stats(self, days: int = 30) -> list[dict]:
+        """Get per-day task completion counts for the last N days."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            """SELECT DATE(completed_at) as day, agent,
+                      COUNT(*) as completed
+               FROM tasks
+               WHERE status = 'done'
+                 AND completed_at >= DATE('now', ?)
+               GROUP BY day, agent
+               ORDER BY day DESC""",
+            (f"-{days} days",),
+        ).fetchall()
+        return [dict(r) for r in rows]
 
     # ── Inter-agent messaging ─────────────────────────────────────────
 
