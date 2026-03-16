@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NAVAIA CREW HQ — Performance</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav>
+        <a href="/" class="nav-brand">CREW HQ<span>NAVAIA AI WORKFORCE</span></a>
+        <ul class="nav-links">
+            <li><a href="/">COMMAND</a></li>
+            <li><a href="/office">OFFICE</a></li>
+            <li><a href="/board">BOARD</a></li>
+            <li><a href="/outputs">OUTPUTS</a></li>
+            <li><a href="/chat">CHAT</a></li>
+            <li><a href="/performance">PERFORMANCE</a></li>
+            <li><a href="/settings">SETTINGS</a></li>
+        </ul>
+        <div class="nav-status">
+            <span class="status-dot" id="conn-dot"></span>
+        </div>
+    </nav>
+
+    <div class="page">
+        <div class="page-title">PERFORMANCE DASHBOARD</div>
+
+        <!-- Agent Scorecards -->
+        <div class="grid-5" id="scorecards">
+            <div class="loading">LOADING SCORES...</div>
+        </div>
+
+        <div style="height:16px;"></div>
+
+        <!-- Token Usage + Task Metrics -->
+        <div class="grid-2">
+            <div class="panel">
+                <div class="panel-header">
+                    TOKEN USAGE
+                    <div class="period-selector" id="token-period">
+                        <button class="period-btn" data-days="7" onclick="switchPeriod(7)">7D</button>
+                        <button class="period-btn active" data-days="14" onclick="switchPeriod(14)">14D</button>
+                        <button class="period-btn" data-days="30" onclick="switchPeriod(30)">30D</button>
+                    </div>
+                </div>
+                <div class="panel-body" id="token-chart">
+                    <div class="loading">LOADING...</div>
+                </div>
+            </div>
+            <div class="panel">
+                <div class="panel-header">TASK METRICS</div>
+                <div class="panel-body" id="task-metrics">
+                    <div class="loading">LOADING...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- KPI Targets vs Actuals -->
+        <div class="panel">
+            <div class="panel-header">KPI TARGETS VS ACTUALS</div>
+            <div class="panel-body">
+                <div class="kpi-tabs" id="kpi-tabs"></div>
+                <div id="kpi-table-container">
+                    <div class="loading">LOADING...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RL Evaluation History -->
+        <div class="panel">
+            <div class="panel-header">RL EVALUATION HISTORY</div>
+            <div class="panel-body">
+                <div class="eval-timeline" id="eval-history">
+                    <div class="loading">LOADING...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/performance.js"></script>
+</body>
+</html>

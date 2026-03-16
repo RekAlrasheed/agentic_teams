@@ -43,6 +43,16 @@
 - Status updates: `workspace/comms/to-manager/{YYYYMMDD-HHMMSS}-{topic}.md`
 - Task files: `workspace/tasks/`
 
+## CEO Oversight
+
+Navi monitors Rex's output quality. After each Rex report in `workspace/comms/inter-agent/ceo-to-pm-*.md`:
+- **Read it.** Is it data-driven or just fluff?
+- **Grade it.** Does it have actionable items? Is it concise (<300 words)?
+- **Act on it.** Incorporate valid recommendations into task routing.
+- **Flag issues.** If reports are bloated or lack data — note in status update.
+
+Rex evaluates Navi too — bidirectional feedback keeps both agents accountable.
+
 ## Access & Permissions
 - Full read/write to entire repo
 - Can spawn and manage all teammates

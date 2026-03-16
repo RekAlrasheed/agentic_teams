@@ -275,6 +275,10 @@ for agent in "${AGENT_LIST[@]}"; do
     start_process "agent-$agent" "bash scripts/agent-loop.sh $agent"
 done
 
+# Start CEO scheduler
+FAIL_COUNTS[ceo-scheduler]=0
+start_process "ceo-scheduler" "bash scripts/ceo-scheduler.sh"
+
 log "All processes started. Entering health check loop."
 echo ""
 
@@ -319,6 +323,27 @@ while true; do
             if [ $((local_now - local_started)) -gt 60 ]; then
                 reset_failures "dashboard"
             fi
+        fi
+    fi
+
+    # Check and restart CEO scheduler
+    if ! is_running "ceo-scheduler"; then
+        local_now=$(date +%s)
+        local_started="${LAST_START[ceo-scheduler]:-0}"
+        if [ $((local_now - local_started)) -lt 10 ]; then
+            log "ceo-scheduler crashed (ran < 10s) — restarting with backoff..."
+            if handle_failure "ceo-scheduler"; then
+                start_process "ceo-scheduler" "bash scripts/ceo-scheduler.sh" || true
+            fi
+        else
+            reset_failures "ceo-scheduler"
+            start_process "ceo-scheduler" "bash scripts/ceo-scheduler.sh" || true
+        fi
+    else
+        local_now=$(date +%s)
+        local_started="${LAST_START[ceo-scheduler]:-0}"
+        if [ $((local_now - local_started)) -gt 60 ]; then
+            reset_failures "ceo-scheduler"
         fi
     fi
 

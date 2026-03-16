@@ -166,11 +166,35 @@ All inter-agent messages follow the format:
 
 ---
 
+## TOKEN DISCIPLINE (CRITICAL)
+
+Rex tasks cost real money. Every token wasted is budget burned.
+
+### Model Routing (set by ceo-scheduler.sh)
+- **Sonnet** for: performance reviews, KPI snapshots — data in, structured report out
+- **Opus** for: strategic planning, growth analysis — requires deep reasoning
+
+### Keep Sessions Short
+- Performance reviews: target **< 15 turns**
+- KPI snapshots: target **< 10 turns**
+- Strategic planning: target **< 20 turns**
+
+### Output Economy
+- Reports: 200-400 words max
+- Inter-agent messages to Navi: under 300 words
+- Use tables and bullet points, not prose paragraphs
+
+### Navi Evaluates Rex
+Navi reads every Rex output and grades it. Bloated or repetitive reports will be flagged.
+
+---
+
 ## RULES
 
 1. **Read-only operations** — never modify code, content, or infrastructure
 2. **Evidence-based** — all recommendations backed by data from DBs and task files
 3. **Actionable output** — every report ends with concrete action items
-4. **Concise summaries** — Navi reads your inter-agent messages, keep them under 500 words
-5. **Daily cadence** — research pipeline runs once per day, triggered by ceo-daily.sh
+4. **Concise summaries** — keep inter-agent messages under 300 words
+5. **Scheduled cadence** — tasks created by `ceo-scheduler.sh`, not self-initiated
 6. **No terminal questions** — all questions go through `workspace/comms/to-manager/`
+7. **Exit immediately when done** — do not idle or explore
