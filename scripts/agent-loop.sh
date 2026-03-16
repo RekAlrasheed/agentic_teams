@@ -97,6 +97,83 @@ BACKOFF_DELAY=0
 
 mkdir -p "$FAILED_DIR" "$SESSION_DIR" "$SESSION_RESPONSES_DIR"
 
+# ── Git Worktree Isolation ────────────────────────────────────────────────────
+# Each agent gets its own git worktree for code isolation.
+# workspace/, .env, knowledge/, and node_modules/ are symlinked to the main
+# repo so task dispatch, comms, and shared state remain accessible to all agents.
+
+WORKTREE_BASE="${REPO_ROOT}/.worktrees"
+WORKTREE_DIR="${WORKTREE_BASE}/${AGENT_NAME}"
+WORKTREE_BRANCH="agent/${AGENT_NAME}-workspace"
+
+setup_worktree() {
+    if [ -d "$WORKTREE_DIR" ] && [ -f "$WORKTREE_DIR/.git" ]; then
+        echo "[$DISPLAY_NAME] Worktree exists at $WORKTREE_DIR"
+        _ensure_worktree_symlinks
+        return 0
+    fi
+
+    echo "[$DISPLAY_NAME] Creating isolated worktree..."
+    mkdir -p "$WORKTREE_BASE"
+
+    if ! git rev-parse --verify "$WORKTREE_BRANCH" >/dev/null 2>&1; then
+        git branch "$WORKTREE_BRANCH" main 2>/dev/null
+        echo "[$DISPLAY_NAME] Created branch: $WORKTREE_BRANCH"
+    fi
+
+    git worktree prune 2>/dev/null || true
+
+    if ! git worktree add "$WORKTREE_DIR" "$WORKTREE_BRANCH" 2>/dev/null; then
+        echo "[$DISPLAY_NAME] ERROR: Failed to create worktree. Falling back to main repo."
+        WORKTREE_DIR="$REPO_ROOT"
+        return 1
+    fi
+
+    _ensure_worktree_symlinks
+    echo "[$DISPLAY_NAME] Worktree ready: $WORKTREE_DIR (branch: $WORKTREE_BRANCH)"
+}
+
+_ensure_worktree_symlinks() {
+    if [ ! -L "$WORKTREE_DIR/workspace" ]; then
+        rm -rf "$WORKTREE_DIR/workspace"
+        ln -sf "$REPO_ROOT/workspace" "$WORKTREE_DIR/workspace"
+    fi
+    if [ ! -L "$WORKTREE_DIR/.env" ]; then
+        rm -f "$WORKTREE_DIR/.env"
+        ln -sf "$REPO_ROOT/.env" "$WORKTREE_DIR/.env"
+    fi
+    if [ -d "$REPO_ROOT/knowledge" ] && [ ! -L "$WORKTREE_DIR/knowledge" ]; then
+        rm -rf "$WORKTREE_DIR/knowledge"
+        ln -sf "$REPO_ROOT/knowledge" "$WORKTREE_DIR/knowledge"
+    fi
+    if [ -d "$REPO_ROOT/node_modules" ] && [ ! -L "$WORKTREE_DIR/node_modules" ]; then
+        rm -rf "$WORKTREE_DIR/node_modules"
+        ln -sf "$REPO_ROOT/node_modules" "$WORKTREE_DIR/node_modules"
+    fi
+}
+
+sync_worktree() {
+    if [ "$WORKTREE_DIR" = "$REPO_ROOT" ]; then
+        return 0
+    fi
+    local prev_dir
+    prev_dir=$(pwd)
+    cd "$WORKTREE_DIR" || return 1
+
+    if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
+        echo "[$DISPLAY_NAME] Worktree has uncommitted changes — stashing before sync"
+        git stash -q 2>/dev/null || true
+    fi
+
+    if ! git merge main --no-edit -q 2>/dev/null; then
+        echo "[$DISPLAY_NAME] Merge conflict with main — resetting to main"
+        git merge --abort 2>/dev/null || true
+        git reset --hard main 2>/dev/null || true
+    fi
+
+    cd "$prev_dir"
+}
+
 # ── Generate MCP config for this agent ────────────────────────────────────────
 
 MCP_CONFIG="/tmp/navaia-${AGENT_NAME}-mcp.json"
@@ -324,6 +401,14 @@ YOUR TASK FOLDER: ${TASK_DIR}/
 Check it for task files. Execute each task according to your skills.
 Save outputs to workspace/outputs/${AGENT_NAME}/.
 
+GIT ISOLATION: You are running in your own git worktree (branch: ${WORKTREE_BRANCH}).
+Your code changes are isolated from other agents. The workspace/ folder is shared.
+- To make code changes: work normally — your files are isolated
+- For git operations: you're already on branch ${WORKTREE_BRANCH}
+- Create feature branches from your worktree branch for code work
+- Push branches with: git push origin <branch-name>
+- NEVER touch the main branch — it's shared and protected
+
 MCP TOOLS AVAILABLE (use instead of manual file I/O):
 - filesystem: read/write workspace/ and knowledge/ files
 - sqlite-tasks: query workspace/tasks.db for task status
@@ -417,12 +502,20 @@ detect_max_turns() {
     esac
 }
 
+# ── Initialize Worktree ──────────────────────────────────────────────────────
+
+setup_worktree
+cd "$WORKTREE_DIR"
+echo "[$DISPLAY_NAME] Working directory: $(pwd)"
+
 # ── Main Loop ────────────────────────────────────────────────────────────────
 
 echo ""
 echo "═══════════════════════════════════════════════════════"
 echo "  $DISPLAY_NAME — Agent Loop"
 echo "  Task folder: $TASK_DIR"
+echo "  Worktree: $WORKTREE_DIR"
+echo "  Branch: $WORKTREE_BRANCH"
 echo "  Default model: $MODEL (auto-escalates for complex tasks)"
 echo "═══════════════════════════════════════════════════════"
 echo ""
@@ -462,14 +555,9 @@ while [ "$SESSION_COUNTER" -lt "$MAX_RESTARTS" ]; do
     SESSION_COUNTER=$((SESSION_COUNTER + 1))
     TASK_COUNT=$(count_tasks "$TASK_DIR")
 
-    # Always ensure we're on main before starting a session
-    # Agents create feature branches for their work, but the repo must start from main
-    CURRENT_BRANCH=$(git branch --show-current 2>/dev/null)
-    if [ "$CURRENT_BRANCH" != "main" ] && [ -n "$CURRENT_BRANCH" ]; then
-        echo "[$DISPLAY_NAME] WARNING: Repo on branch '$CURRENT_BRANCH', switching to main..."
-        git stash -q 2>/dev/null || true
-        git checkout main -q 2>/dev/null || true
-    fi
+    # Sync worktree branch with latest main before each session
+    sync_worktree
+    cd "$WORKTREE_DIR" 2>/dev/null || true
 
     # Clean stale lock files (agent not actually running)
     if [ -f "/tmp/navaia-${AGENT_NAME}-working" ]; then
