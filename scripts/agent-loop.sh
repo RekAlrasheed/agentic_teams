@@ -483,11 +483,8 @@ while [ "$SESSION_COUNTER" -lt "$MAX_RESTARTS" ]; do
     SESSION_MODEL=$(detect_model)
     SESSION_MAX_TURNS=$(detect_max_turns "$SESSION_MODEL")
 
-    # Build MCP args
-    MCP_ARGS=()
-    if [ -n "$MCP_CONFIG" ] && [ -f "$MCP_CONFIG" ]; then
-        MCP_ARGS=(--mcp-config "$MCP_CONFIG")
-    fi
+    # NOTE: MCP disabled — causes Claude to hang in pipe mode (2026-03-15)
+    # Agents use built-in tools (Read, Write, Edit, Bash, Glob, Grep) instead
 
     # ── Phase 1: Process NEW tasks ────────────────────────────────────────
     while IFS= read -r TASK_FILE; do
@@ -513,8 +510,7 @@ while [ "$SESSION_COUNTER" -lt "$MAX_RESTARTS" ]; do
             --model "$SESSION_MODEL" \
             --max-turns "$SESSION_MAX_TURNS" \
             --output-format json \
-            "${MCP_ARGS[@]}" \
-            "$PROMPT" >"$CLAUDE_STDOUT" 2>"$CLAUDE_STDERR" || CLAUDE_EXIT=$?
+            "$PROMPT" < /dev/null >"$CLAUDE_STDOUT" 2>"$CLAUDE_STDERR" || CLAUDE_EXIT=$?
         END_TIME=$(date +%s)
         DURATION_MS=$(( (END_TIME - START_TIME) * 1000 ))
         rm -f "/tmp/navaia-${AGENT_NAME}-working"
@@ -651,8 +647,7 @@ except: print('')
             --max-turns "$SESSION_MAX_TURNS" \
             --output-format json \
             --resume "$RESUME_SESSION_ID" \
-            "${MCP_ARGS[@]}" \
-            "Manager's response: $RESPONSE_TEXT" >"$CLAUDE_STDOUT" 2>"$CLAUDE_STDERR" || CLAUDE_EXIT=$?
+            "Manager's response: $RESPONSE_TEXT" < /dev/null >"$CLAUDE_STDOUT" 2>"$CLAUDE_STDERR" || CLAUDE_EXIT=$?
         END_TIME=$(date +%s)
         rm -f "/tmp/navaia-${AGENT_NAME}-working"
 
