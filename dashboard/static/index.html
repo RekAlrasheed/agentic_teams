@@ -15,6 +15,7 @@
             <li><a href="/board">BOARD</a></li>
             <li><a href="/outputs">OUTPUTS</a></li>
             <li><a href="/chat">CHAT</a></li>
+            <li><a href="/performance">PERFORMANCE</a></li>
             <li><a href="/settings">SETTINGS</a></li>
         </ul>
         <div class="nav-status">
@@ -124,8 +125,15 @@
                 el.innerHTML = '<div class="empty-state"><div class="message">NO AGENTS CONFIGURED</div></div>';
                 return;
             }
-            el.innerHTML = agents.map(a => `
+            el.innerHTML = agents.map(a => {
+                const alertHtml = a.alert ? `
+                    <div class="agent-alert ${a.alert.level}" onclick="event.stopPropagation(); showAlertDetail('${escapeHtml(a.name)}', ${escapeAttr(JSON.stringify(a.alert))})">
+                        <span class="alert-icon">${a.alert.level === 'red' ? '!' : '?'}</span>
+                        <span class="alert-text">${escapeHtml(a.alert.title)}</span>
+                    </div>` : '';
+                return `
                 <div class="agent-card" onclick="AgentDetail.open('${a.id}')" style="border-left: 4px solid ${a.color}">
+                    ${alertHtml}
                     <div class="agent-name" style="color: ${a.color}">${a.name}</div>
                     <div class="agent-role">${a.role}</div>
                     <div class="agent-state ${a.state}">${a.state}</div>
@@ -133,8 +141,8 @@
                     <div style="font-size: 14px; color: var(--text-dim); margin-top: 4px;">
                         ${a.task_count} task${a.task_count !== 1 ? 's' : ''} | ${a.model}
                     </div>
-                </div>
-            `).join('');
+                </div>`;
+            }).join('');
         }
 
         function renderPipeline(tasks) {

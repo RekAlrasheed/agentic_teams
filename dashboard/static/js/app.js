@@ -183,6 +183,11 @@ const CrewHQ = {
         });
         return await r.json();
     },
+
+    async getPerformanceDashboard(days = 30) {
+        const r = await fetch(`/api/performance/dashboard?days=${days}`);
+        return await r.json();
+    },
 };
 
 // ── Navigation ──────────────────────────────────────────
@@ -228,6 +233,7 @@ function agentColor(agentId) {
         creative: '#ff8c42', muse: '#ff8c42',
         technical: '#a855f7', arch: '#a855f7',
         admin: '#22c55e', sage: '#22c55e',
+        ceo: '#f59e0b', rex: '#f59e0b',
     };
     return colors[agentId?.toLowerCase()] || '#666';
 }
@@ -236,6 +242,24 @@ function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML.replace(/\n/g, '<br>');
+}
+
+function escapeAttr(str) {
+    return str.replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+}
+
+function showAlertDetail(agentName, alert) {
+    const levelLabel = alert.level === 'red' ? 'CRITICAL' : 'WARNING';
+    const levelColor = alert.level === 'red' ? '#ef4444' : '#fbbf24';
+    showModal(`
+        <h3 style="color: ${levelColor}; margin-bottom: 12px;">${levelLabel}: ${agentName}</h3>
+        <p><strong>${escapeHtml(alert.title)}</strong></p>
+        <p style="color: var(--text-dim); margin: 8px 0;">${escapeHtml(alert.detail || '')}</p>
+        <div style="background: var(--surface); padding: 12px; border-radius: 6px; margin-top: 12px;">
+            <strong>ACTION NEEDED:</strong><br>${escapeHtml(alert.action || '')}
+        </div>
+        <button onclick="closeModal()" style="margin-top: 16px; padding: 8px 24px; cursor: pointer;">Close</button>
+    `);
 }
 
 // ── Modal ───────────────────────────────────────────────

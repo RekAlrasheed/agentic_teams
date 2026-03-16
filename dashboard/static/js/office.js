@@ -246,6 +246,18 @@ function drawOverlays() {
     ctx.fillText(as, cx, by + 14);
     ctx.textAlign = 'left';
 
+    // Alert indicator (flashing ! or !!)
+    if (a.alert && frame % 20 < 14) {
+      const ac = a.alert.level === 'red' ? '#ef4444' : '#fbbf24';
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 10px "Press Start 2P"'; ctx.fillStyle = ac;
+      const ax = cx, ay = s.y - 28 * Z;
+      ctx.fillText(a.alert.level === 'red' ? '!!' : '!', ax, ay);
+      ctx.font = '5px "Press Start 2P"';
+      ctx.fillText(a.alert.title.slice(0, 12), ax, ay + 8);
+      ctx.textAlign = 'left';
+    }
+
     // Task bubble
     if ((as === 'WORKING' || as === 'STARTING') && a.current_task && s.st === 'sit') {
       const bx = cx, bby = s.y - 22 * Z;

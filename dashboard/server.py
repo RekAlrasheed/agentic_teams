@@ -110,16 +110,20 @@ def log_activity(event_type, message, agent=None):
 # ── Agent State Detection ────────────────────────────────────────────────────
 
 def get_agent_state(agent):
+    """Returns the agent state string."""
+    return get_agent_state_full(agent)["state"]
+
+
+def get_agent_state_full(agent):
+    """Returns dict with 'state' and 'alert' (yellow/red badge info)."""
     agent_id = agent["id"]
     task_dir = REPO_ROOT / agent.get("task_dir", f"workspace/tasks/{agent_id}")
     extra_dirs = agent.get("extra_dirs", [])
 
-    # Count pending tasks across primary + extra dirs
     task_count = count_files(task_dir)
     for ed in extra_dirs:
         task_count += count_files(REPO_ROOT / ed)
 
-    # Check if agent-loop.sh is running for this agent
     try:
         result = subprocess.run(
             ["pgrep", "-f", f"agent-loop.sh {agent_id}"],
@@ -139,19 +143,58 @@ def get_agent_state(agent):
         except Exception:
             pass
 
-    # Check per-agent lock file (set by agent-loop.sh when claude is active)
     lock_file = Path(f"/tmp/navaia-{agent_id}-working")
-    if lock_file.exists():
-        return "WORKING"
+    lock_exists = lock_file.exists()
+    lock_age_s = int(time.time() - lock_file.stat().st_mtime) if lock_exists else None
 
-    # Tasks queued → agent should appear active even if loop isn't running
-    if task_count > 0:
-        return "WORKING" if loop_running else "STARTING"
+    if lock_exists:
+        state = "WORKING"
+    elif task_count > 0:
+        state = "WORKING" if loop_running else "STARTING"
+    elif not loop_running:
+        state = "OFFLINE"
+    else:
+        state = "IDLE"
 
-    if not loop_running:
-        return "OFFLINE"
+    # ── Alert Detection ─────────────────────────────────────
+    alert = None
 
-    return "IDLE"
+    # RED: Failed tasks for this agent
+    if FAILED_DIR.exists():
+        failed = [f.name for f in FAILED_DIR.iterdir()
+                  if f.is_file() and f.name != ".gitkeep" and agent_id in f.name]
+        if failed:
+            alert = {"level": "red", "title": f"{len(failed)} task(s) FAILED",
+                     "detail": ", ".join(f[:40] for f in failed[:3]),
+                     "action": "Check workspace/tasks/failed/ — retry or reassign"}
+
+    # YELLOW: Waiting for Manager approval
+    if not alert and TO_FOUNDER_DIR.exists():
+        for f in TO_FOUNDER_DIR.iterdir():
+            if f.is_file() and f.name != ".gitkeep":
+                try:
+                    txt = f.read_text(encoding="utf-8", errors="replace")[:500].lower()
+                    if "awaiting" in txt and "approv" in txt:
+                        alert = {"level": "yellow", "title": "Waiting for approval",
+                                 "detail": f.name,
+                                 "action": "Review plan and reply APPROVED"}
+                        break
+                except Exception:
+                    pass
+
+    # YELLOW: Working too long (>15 min)
+    if not alert and lock_age_s and lock_age_s > 900:
+        alert = {"level": "yellow", "title": f"Working {lock_age_s // 60}m",
+                 "detail": "May be stuck or processing a complex task",
+                 "action": "Check agent output or restart"}
+
+    # RED: Tasks queued but loop offline
+    if not alert and task_count > 0 and not loop_running:
+        alert = {"level": "red", "title": "Loop offline",
+                 "detail": f"{task_count} task(s) queued, loop not running",
+                 "action": f"Run: bash scripts/agent-loop.sh {agent_id}"}
+
+    return {"state": state, "alert": alert}
 
 
 def count_files(directory):
@@ -339,12 +382,14 @@ def get_full_state():
     agents = load_agents()
     agent_states = []
     for agent in agents:
-        state = get_agent_state(agent)
+        state_info = get_agent_state_full(agent)
+        state = state_info["state"]
         current_task = get_current_task(agent) if state in ("WORKING", "STARTING") else None
         task_dir = REPO_ROOT / agent.get("task_dir", f"workspace/tasks/{agent['id']}")
         agent_states.append({
             **agent,
             "state": state,
+            "alert": state_info.get("alert"),
             "current_task": current_task,
             "task_count": count_files(task_dir),
         })
@@ -901,6 +946,7 @@ PAGE_ROUTES = {
     "/outputs": "outputs.html",
     "/settings": "settings.html",
     "/chat": "chat.html",
+    "/performance": "performance.html",
 }
 
 
@@ -1123,6 +1169,47 @@ class CrewHQHandler(SimpleHTTPRequestHandler):
                     self.send_json({"error": "Agent not found"}, 404)
                 return
 
+        # ── Performance API (GET) ─────────────────────────────
+        if path == "/api/performance/dashboard":
+            try:
+                from performance_db import PerformanceDB
+                db = PerformanceDB()
+                qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                days = int(qs.get("days", ["30"])[0])
+                self.send_json(db.get_dashboard_data(days))
+            except Exception as e:
+                self.send_json({"error": str(e)}, 500)
+            return
+
+        if path == "/api/performance/scores":
+            try:
+                from performance_db import PerformanceDB
+                db = PerformanceDB()
+                self.send_json(db.get_score_summary())
+            except Exception as e:
+                self.send_json({"error": str(e)}, 500)
+            return
+
+        if path == "/api/performance/scores/history":
+            try:
+                from performance_db import PerformanceDB
+                db = PerformanceDB()
+                qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                limit = int(qs.get("limit", ["50"])[0])
+                self.send_json(db.get_all_scores(limit))
+            except Exception as e:
+                self.send_json({"error": str(e)}, 500)
+            return
+
+        if path == "/api/performance/kpis/latest":
+            try:
+                from performance_db import PerformanceDB
+                db = PerformanceDB()
+                self.send_json(db.get_latest_kpis())
+            except Exception as e:
+                self.send_json({"error": str(e)}, 500)
+            return
+
         self.send_error(404)
 
     def do_POST(self):
@@ -1175,6 +1262,34 @@ class CrewHQHandler(SimpleHTTPRequestHandler):
                 log_activity("task", f"Task created: {result.get('task_title', '')}", "pm")
             log_activity("chat", f"Navi: {reply_text[:60]}", "pm")
             self.send_json(result)
+            return
+
+        # ── Performance POST API ──────────────────────────────
+        if path == "/api/performance/evaluate":
+            try:
+                from performance_db import PerformanceDB
+                agent = data.get("agent", "")
+                quality_rating = data.get("quality_rating")
+                score_delta = data.get("score_delta")
+                if not agent or quality_rating is None or score_delta is None:
+                    self.send_json({"error": "agent, quality_rating, score_delta required"}, 400)
+                    return
+                db = PerformanceDB()
+                row_id = db.record_evaluation(
+                    agent=agent,
+                    batch=data.get("batch", 0),
+                    score_delta=float(score_delta),
+                    quality_rating=int(quality_rating),
+                    token_efficiency=float(data.get("token_efficiency", 0.0)),
+                    failure_count=int(data.get("failure_count", 0)),
+                    success_count=int(data.get("success_count", 0)),
+                    evaluation_summary=data.get("summary", ""),
+                    tasks_evaluated=data.get("tasks_evaluated", []),
+                )
+                self.send_json({"ok": True, "id": row_id})
+                log_activity("performance", f"RL eval: {agent} scored {score_delta:+.1f}", agent)
+            except Exception as e:
+                self.send_json({"error": str(e)}, 500)
             return
 
         # ── Agent Detail POST API ─────────────────────────────
@@ -1276,6 +1391,7 @@ def main():
 ║     /board   Trello Board                    ║
 ║     /outputs Output Browser                  ║
 ║     /chat    Chat with Navi                  ║
+║     /performance Performance Dashboard       ║
 ║     /settings Settings                       ║
 ║                                              ║
 ╚══════════════════════════════════════════════╝
